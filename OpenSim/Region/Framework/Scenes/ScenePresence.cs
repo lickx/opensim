@@ -3074,7 +3074,7 @@ namespace OpenSim.Region.Framework.Scenes
 //                Name, pos, terrainHeight, m_scene.RegionInfo.RegionName);
 
             bool shouldfly = Flying;
-            if (noFly)
+            if (noFly || !landAtTarget)
                 shouldfly = false;
             else if (pos.Z > terrainHeight || Flying)
                 shouldfly = true;
