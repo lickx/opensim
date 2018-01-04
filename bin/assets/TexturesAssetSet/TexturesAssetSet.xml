@@ -355,6 +355,12 @@
     <Key Name="assetType" Value="0" />
     <Key Name="fileName" Value="hg2.jp2"/>
   </Section>
+  <Section Name="Sun">
+     <Key Name="assetID" Value="cce0f112-878f-4586-a2e2-a8f104bba271"/>
+     <Key Name="name" Value="Sun"/>
+     <Key Name="assetType" Value="0" />
+     <Key Name="fileName" Value="cce0f112-878f-4586-a2e2-a8f104bba271.j2c" />
+  </Section>
   <Section Name="Moon">
     <Key Name="assetID" Value="ec4b9f0b-d008-45c6-96a4-01dd947ac621"/>
     <Key Name="name" Value="Moon"/>
