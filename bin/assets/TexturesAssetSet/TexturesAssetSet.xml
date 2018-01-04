@@ -778,4 +778,12 @@
      <Key Name="fileName" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d.j2c" />
   </Section>
 
+  <!-- This is the texture used for stars, as well as the default particle texture -->
+  <Section Name="IMG_SHOT">
+    <Key Name="assetID" Value="35f217a3-f618-49cf-bbca-c86d486551a9"/>
+    <Key Name="name" Value="IMG_SHOT"/>
+    <Key Name="assetType" Value="0" />
+    <Key Name="fileName" Value="35f217a3-f618-49cf-bbca-c86d486551a9.j2c" />
+  </Section>
+
 </Nini>
