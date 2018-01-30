@@ -763,15 +763,15 @@
     Texture expected by viewers for properly displaying stars in the night sky
     Name derives from label in viewer code
   -->
-  <Section Name="IMG_BLOOM1 Texture">
+  <Section Name="IMG_BLOOM1">
     <Key Name="assetID" Value="3c59f7fe-9dc8-47f9-8aaf-a9dd1fbc3bef"/>
-    <Key Name="name" Value="IMG_BLOOM1 Texture"/>
+    <Key Name="name" Value="Bloom"/>
     <Key Name="assetType" Value="0" />
-    <Key Name="fileName" Value="IMG_BLOOM1.jp2" />
+    <Key Name="fileName" Value="3c59f7fe-9dc8-47f9-8aaf-a9dd1fbc3bef.j2c" />
   </Section>
 
   <!-- This is what makes translucent objects light up in red with CTRL-ALT-T in the viewer: -->
-  <Section Name="Smoke">
+  <Section Name="IMG_SMOKE">
      <Key Name="assetID" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d"/>
      <Key Name="name" Value="Smoke"/>
      <Key Name="assetType" Value="0" />
