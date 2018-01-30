@@ -811,9 +811,17 @@
     <Key Name="fileName" Value="35f217a3-f618-49cf-bbca-c86d486551a9.j2c" />
   </Section>
 
+  <!-- Not sure what this is used for but it looks like a smokey cloud in Photoshop -->
+  <Section Name="IMG_DEFAULT">
+    <Key Name="assetID" Value="d2114404-dd59-4a4d-8e6c-49359e91bbf0"/>
+    <Key Name="name" Value="IMG_DEFAULT"/>
+    <Key Name="assetType" Value="0" />
+    <Key Name="fileName" Value="d2114404-dd59-4a4d-8e6c-49359e91bbf0.j2c" />
+  </Section>
+
   <Section Name="IMG_SMOKE_POOF">
     <Key Name="assetID" Value="1e63e323-5fe0-452e-92f8-b98bd0f764e3"/>
-    <Key Name="name" Value="Smoke poof"/>
+    <Key Name="name" Value="IMG_SMOKE_POOF"/>
     <Key Name="assetType" Value="0" />
     <Key Name="fileName" Value="1e63e323-5fe0-452e-92f8-b98bd0f764e3.j2c" />
   </Section>
