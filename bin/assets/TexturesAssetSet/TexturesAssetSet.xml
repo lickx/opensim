@@ -786,4 +786,12 @@
     <Key Name="fileName" Value="35f217a3-f618-49cf-bbca-c86d486551a9.j2c" />
   </Section>
 
+  <Section Name="IMG_SMOKE_POOF">
+    <Key Name="assetID" Value="1e63e323-5fe0-452e-92f8-b98bd0f764e3"/>
+    <Key Name="name" Value="Smoke poof"/>
+    <Key Name="assetType" Value="0" />
+    <Key Name="fileName" Value="1e63e323-5fe0-452e-92f8-b98bd0f764e3.j2c" />
+  </Section>
+
+
 </Nini>
