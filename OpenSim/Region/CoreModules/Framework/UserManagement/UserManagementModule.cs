@@ -1,4 +1,5 @@
-/*
+/* 15 feb 2018
+ * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -27,6 +28,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Threading;
 
@@ -63,6 +65,8 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
         protected Dictionary<UUID, UserData> m_UserCache = new Dictionary<UUID, UserData>();
 
         protected bool m_DisplayChangingHomeURI = false;
+
+        protected URLChecker URLCheck = new URLChecker();
 
         #region ISharedRegionModule
 
@@ -186,50 +190,55 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
             if(m_Scenes.Count <= 0)
                 return;
 
+            if (!client.IsActive)
+                return;
+
             if (m_Scenes[0].LibraryService != null && (m_Scenes[0].LibraryService.LibraryRootFolder.Owner == uuid))
             {
                 client.SendNameReply(uuid, "Mr", "OpenSim");
+                return;
             }
-            else
+
+            UserData user;
+
+            bool found = false;
+            lock (m_UserCache)
+                  found = m_UserCache.TryGetValue(uuid, out user);
+
+            if (found)
             {
-                UserData user;
-                /* bypass that continuation here when entry is already available */
-                lock (m_UserCache)
+                if (!user.IsUnknownUser && user.HasGridUserTried)
                 {
-                    if (m_UserCache.TryGetValue(uuid, out user))
-                    {
-                        if (!user.IsUnknownUser && user.HasGridUserTried)
-                        {
-                            client.SendNameReply(uuid, user.FirstName, user.LastName);
-                            return;
-                        }
-                    }
+                    if (client.IsActive)
+                        client.SendNameReply(uuid, user.FirstName, user.LastName);
+                    return;
                 }
-
-                // Not found in cache, queue continuation
-                m_ServiceThrottle.Enqueue("uuidname", uuid.ToString(),  delegate
-                {
-                    //m_log.DebugFormat("[YYY]: Name request {0}", uuid);
-
-                    // As least upto September 2013, clients permanently cache UUID -> Name bindings.  Some clients
-                    // appear to clear this when the user asks it to clear the cache, but others may not.
-                    //
-                    // So to avoid clients
-                    // (particularly Hypergrid clients) permanently binding "Unknown User" to a given UUID, we will
-                    // instead drop the request entirely.
-                    if(!client.IsActive)
-                        return;
-                    if (GetUser(uuid, out user))
-                    {
-                        if(client.IsActive)
-                            client.SendNameReply(uuid, user.FirstName, user.LastName);
-                    }
-//                    else
-//                        m_log.DebugFormat(
-//                            "[USER MANAGEMENT MODULE]: No bound name for {0} found, ignoring request from {1}",
-//                            uuid, client.Name);
-                });
             }
+
+            // Not found in cache, queue continuation
+            m_ServiceThrottle.Enqueue("uuidname", uuid.ToString(), delegate
+            {
+                //m_log.DebugFormat("[YYY]: Name request {0}", uuid);
+
+                // As least upto September 2013, clients permanently cache UUID -> Name bindings.  Some clients
+                // appear to clear this when the user asks it to clear the cache, but others may not.
+                //
+                // So to avoid clients
+                // (particularly Hypergrid clients) permanently binding "Unknown User" to a given UUID, we will
+                // instead drop the request entirely.
+                if (!client.IsActive)
+                    return;
+
+                if (GetUser(uuid, out user))
+                {
+                    if (client.IsActive)
+                        client.SendNameReply(uuid, user.FirstName, user.LastName);
+                }
+                //                    else
+                //                        m_log.DebugFormat(
+                //                            "[USER MANAGEMENT MODULE]: No bound name for {0} found, ignoring request from {1}",
+                //                            uuid, client.Name);
+            });
         }
 
         public virtual void HandleAvatarPickerRequest(IClientAPI client, UUID avatarID, UUID RequestID, string query)
@@ -319,15 +328,16 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
             foreach (UserData data in m_UserCache.Values)
             {
                 if (data.Id != UUID.Zero && !data.IsUnknownUser &&
-                    users.Find(delegate(UserData d) { return d.Id == data.Id; }) == null &&
+                    users.Find(delegate (UserData d) { return d.Id == data.Id; }) == null &&
                     (data.FirstName.ToLower().StartsWith(query.ToLower()) || data.LastName.ToLower().StartsWith(query.ToLower())))
+                {
                     users.Add(data);
+                }
             }
 
             AddAdditionalUsers(query, users);
 
             return users;
-
         }
 
         #endregion IPeople
@@ -335,14 +345,17 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
         protected virtual void CacheCreators(SceneObjectGroup sog)
         {
             //m_log.DebugFormat("[USER MANAGEMENT MODULE]: processing {0} {1}; {2}", sog.RootPart.Name, sog.RootPart.CreatorData, sog.RootPart.CreatorIdentification);
-            AddUser(sog.RootPart.CreatorID, sog.RootPart.CreatorData);
 
-            foreach (SceneObjectPart sop in sog.Parts)
+            AddUser(sog.RootPart.CreatorID, sog.RootPart.CreatorData);
+            Util.FireAndForget(delegate
             {
-                AddUser(sop.CreatorID, sop.CreatorData);
-                foreach (TaskInventoryItem item in sop.TaskInventory.Values)
-                    AddUser(item.CreatorID, item.CreatorData);
-            }
+               foreach (SceneObjectPart sop in sog.Parts)
+               {
+                   AddUser(sop.CreatorID, sop.CreatorData);
+                   foreach (TaskInventoryItem item in sop.TaskInventory.Values)
+                       AddUser(item.CreatorID, item.CreatorData);
+               }
+            }, null, "CacheCreators", false);
         }
 
         /// <summary>
@@ -442,7 +455,6 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                 return false;
             }
         }
-
 
         #region IUserManagement
 
@@ -722,25 +734,26 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                 return false;
             }
 
+            bool found = false;
             lock (m_UserCache)
+                  found = m_UserCache.TryGetValue(uuid, out userdata);
+
+            if (found)
             {
-                if (m_UserCache.TryGetValue(uuid, out userdata))
+                if (userdata.HasGridUserTried)
                 {
-                    if (userdata.HasGridUserTried)
-                    {
-                        return true;
-                    }
+                    return true;
                 }
-                else
-                {
-                    userdata = new UserData();
-                    userdata.Id = uuid;
-                    userdata.FirstName = "Unknown";
-                    userdata.LastName = "UserUMMAU42";
-                    userdata.HomeURL = string.Empty;
-                    userdata.IsUnknownUser = true;
-                    userdata.HasGridUserTried = false;
-                }
+            }
+            else
+            {
+                userdata = new UserData();
+                userdata.Id = uuid;
+                userdata.FirstName = "Unknown";
+                userdata.LastName = "UserUMMAU42";
+                userdata.HomeURL = string.Empty;
+                userdata.IsUnknownUser = true;
+                userdata.HasGridUserTried = false;
             }
 
             /* BEGIN: do not wrap this code in any lock here
@@ -785,6 +798,8 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                             {
                                 userdata.LastName = "@" + new Uri(url).Authority;
                                 userdata.IsUnknownUser = false;
+
+                                URLCheck.SubmitForcheck(url);
                             }
                             catch
                             {
@@ -800,9 +815,8 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
             /* END: do not wrap this code in any lock here */
 
             lock (m_UserCache)
-            {
-                m_UserCache[uuid] = userdata;
-            }
+                  m_UserCache[uuid] = userdata;
+
             return !userdata.IsUnknownUser;
         }
 
@@ -826,50 +840,55 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
         public virtual void AddUser(UUID uuid, string first, string last, string homeURL)
         {
             //m_log.DebugFormat("[USER MANAGEMENT MODULE]: Adding user with id {0}, first {1}, last {2}, url {3}", uuid, first, last, homeURL);
+            bool found = false;
 
             UserData oldUser;
             lock (m_UserCache)
+                  found = m_UserCache.TryGetValue(uuid, out oldUser);
+            
+            if (found)
             {
-                if (m_UserCache.TryGetValue(uuid, out oldUser))
+                if (!oldUser.IsUnknownUser)
                 {
-                    if (!oldUser.IsUnknownUser)
+                    if (homeURL != oldUser.HomeURL && m_DisplayChangingHomeURI)
                     {
-                        if (homeURL != oldUser.HomeURL && m_DisplayChangingHomeURI)
-                        {
-                            m_log.DebugFormat("[USER MANAGEMENT MODULE]: Different HomeURI for {0} {1} ({2}): {3} and {4}",
+                        m_log.DebugFormat("[USER MANAGEMENT MODULE]: Different HomeURI for {0} {1} ({2}): {3} and {4}",
                                 first, last, uuid.ToString(), homeURL, oldUser.HomeURL);
-                        }
-                        /* no update needed */
-                        return;
                     }
+                    /* no update needed */
+                    return;
                 }
-                else if(!m_UserCache.ContainsKey(uuid))
+            }
+            else // Not found!
+            {
+                oldUser = new UserData();
+                oldUser.HasGridUserTried = false;
+                oldUser.IsUnknownUser = false;
+                if (homeURL != string.Empty)
                 {
-                    oldUser = new UserData();
-                    oldUser.HasGridUserTried = false;
-                    oldUser.IsUnknownUser = false;
-                    if (homeURL != string.Empty)
+                    oldUser.FirstName = first.Replace(" ", ".") + "." + last.Replace(" ", ".");
+                    try
                     {
-                        oldUser.FirstName = first.Replace(" ", ".") + "." + last.Replace(" ", ".");
-                        try
-                        {
-                            oldUser.LastName = "@" + new Uri(homeURL).Authority;
-                            oldUser.IsUnknownUser = false;
-                        }
-                        catch
-                        {
-                            oldUser.LastName = "@unknown";
-                        }
+                        oldUser.LastName = "@" + new Uri(homeURL).Authority;
+                        oldUser.IsUnknownUser = false;
+
+                        URLCheck.SubmitForcheck(homeURL);
                     }
-                    else
+                    catch
                     {
-                        oldUser.FirstName = first;
-                        oldUser.LastName = last;
+                        oldUser.LastName = "@unknown";
                     }
-                    oldUser.HomeURL = homeURL;
-                    oldUser.Id = uuid;
-                    m_UserCache.Add(uuid, oldUser);
                 }
+                else
+                {
+                    oldUser.FirstName = first;
+                    oldUser.LastName = last;
+                }
+                oldUser.HomeURL = homeURL;
+                oldUser.Id = uuid;
+
+                lock (m_UserCache)
+                      m_UserCache[uuid] = oldUser;
             }
         }
 
@@ -877,7 +896,7 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
         {
             // m_log.InfoFormat("[USER MANAGEMENT MODULE]: Adding user with id {0}, creatorData {1}", id, creatorData);
 
-            if(string.IsNullOrEmpty(creatorData))
+            if (string.IsNullOrEmpty(creatorData))
             {
                 AddUser(id, string.Empty, string.Empty, string.Empty);
             }
@@ -911,8 +930,9 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                 if (parts.Length >= 1)
                 {
                     homeURL = parts[0];
-                    if(Uri.IsWellFormedUriString(homeURL, UriKind.Absolute))
+                    if (Uri.IsWellFormedUriString(homeURL, UriKind.Absolute))
                     {
+                        URLCheck.SubmitForcheck(homeURL);
                         AddUser(id, firstname, lastname, homeURL);
                     }
                     else
@@ -921,7 +941,7 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
 
                         lock (m_UserCache)
                         {
-                            if(!m_UserCache.ContainsKey(id))
+                            if (!m_UserCache.ContainsKey(id))
                             {
                                 UserData newUser = new UserData();
                                 newUser.Id = id;
@@ -1061,6 +1081,154 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
             MainConsole.Instance.Output(cdt.ToString());
         }
 
-    }
+        public class URLChecker
+        {
+            struct oneURL
+            {
+                public string host;
+                public int port;
+            }
 
+            private static readonly Queue<string> m_queue = new Queue<string>();
+            private static readonly HashSet<string> m_valid = new HashSet<string>();
+            private static readonly Dictionary<string, long> m_invalid = new Dictionary<string, long>();
+            private static volatile bool m_checking = false;
+
+            private string URLtoURI(string URL)
+            {
+                try
+                {
+                    string uri = URL.Trim();
+                    if (uri != string.Empty)
+                        uri = new Uri(uri).Authority;
+                    return uri;
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+
+            private oneURL MakeOneURL(string uri)
+            {
+                string h = uri;
+                int p = 80;
+                try
+                {
+                    string[] s = uri.Split(':');
+                    h = s[0];
+                    if (!int.TryParse(s[1], out p))
+                        p = 80;
+                }
+                catch
+                {
+                    h = uri;
+                    p = 80;
+                }
+
+                return new oneURL() { host = h, port = p };
+            }
+
+            private void CheckURLs()
+            {
+                while (m_checking)
+                {
+                    string uri = string.Empty;
+                    lock (m_queue)
+                    {
+                        if (m_queue.Count == 0)
+                        {
+                            m_checking = false;
+                            return;
+                        }
+
+                        uri = m_queue.Dequeue();
+
+                        // No need to recheck valid urls but we should
+                        // recheck invalid ones periodicly.
+                        if (m_invalid.ContainsKey(uri)) 
+                        {
+                            // Next check is in at least 30 minutes.
+                            // Skip checking now when nextCheck is still in the future.
+                            if (DateTime.Now.Ticks < m_invalid[uri])
+                                continue; // Skip rechecking this domain now.
+                        }
+                    }
+
+                    oneURL u = MakeOneURL(uri);
+                    try
+                    {
+                        IPAddress ipAddress = Dns.GetHostEntry(u.host).AddressList[0];
+                        IPEndPoint ipLocalEndPoint = new IPEndPoint(ipAddress, u.port);
+
+                        //Serializes the IPEndPoint. 
+                        SocketAddress socketAddress = ipLocalEndPoint.Serialize();
+
+                        lock (m_queue)
+                        {
+                            m_valid.Add(uri);
+                            m_invalid.Remove(uri);
+                        }
+                    }
+                    catch
+                    {
+                        lock (m_queue)
+                            m_invalid[uri]= DateTime.Now.AddMinutes(30).Ticks;
+                    }
+
+                    Thread.Yield();
+                }
+            }
+
+            public void SubmitForcheck(string HomeURL)
+            {
+                string uri = URLtoURI(HomeURL);
+
+                if (uri != string.Empty)
+                    lock (m_queue)
+                    {
+                        // No need to recheck valid domains.
+                        if (m_valid.Contains(uri))
+                            return;
+
+                        m_queue.Enqueue(uri);
+
+                        if (!m_checking)
+                        {
+                            m_checking = true;
+                            Util.FireAndForget(delegate
+                            {
+                                CheckURLs();
+                            }, null, "URLChecker", false);
+                        }
+                    }
+            }
+
+            public bool isValid(string HomeURL, out bool Known) // false does not mean its not valid.
+            {
+                Known = false;
+
+                string uri = URLtoURI(HomeURL);
+
+                if (uri != string.Empty)
+                lock (m_queue)
+                {
+                    if (m_valid.Contains(uri))
+                    {
+                        Known = true;
+                        return true;
+                    }
+
+                    // Rechecking invalid domains can be initiated by
+                    // resubmitting the url for check.
+                    if (m_invalid.ContainsKey(uri))
+                        Known = true;
+                }
+
+                // Will also be false when the domain has not been checked yet.
+                // In that case Known is false.
+                return false;
+            }
+        }
+    }
 }

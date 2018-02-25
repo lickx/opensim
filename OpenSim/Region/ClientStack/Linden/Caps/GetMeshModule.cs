@@ -1,4 +1,5 @@
-/*
+/* 11 feb 2018
+ * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -53,18 +54,6 @@ namespace OpenSim.Region.ClientStack.Linden
     [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "GetMeshModule")]
     public class GetMeshModule : INonSharedRegionModule
     {
-//        private static readonly ILog m_log =
-//            LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-
-        private Scene m_scene;
-        private IAssetService m_AssetService;
-        private bool m_Enabled = true;
-        private string m_URL;
-
-        private string m_URL2;
-        private string m_RedirectURL = null;
-        private string m_RedirectURL2 = null;
-
         struct aPollRequest
         {
             public PollServiceMeshEventArgs thepoll;
@@ -79,21 +68,29 @@ namespace OpenSim.Region.ClientStack.Linden
             public int lod;
         }
 
-
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private static GetMeshHandler m_getMeshHandler;
+        private Scene m_scene;
 
-        private IAssetService m_assetService = null;
+        private string m_URL;
+
+        private string m_URL2;
+        private string m_RedirectURL = null;
+        private string m_RedirectURL2 = null;
+
+        // Removed m_enable boolean since it was always true and never set to false.
+
+        private static IAssetService m_assetService = null;
 
         private Dictionary<UUID, string> m_capsDict = new Dictionary<UUID, string>();
-        private static Thread[] m_workerThreads = null;
         private static int m_NumberScenes = 0;
-        private static OpenSim.Framework.BlockingQueue<aPollRequest> m_queue =
-                new OpenSim.Framework.BlockingQueue<aPollRequest>();
+
+        private static readonly Queue<aPollRequest> m_queue = new Queue<aPollRequest>();
+        private static readonly ManualResetEvent m_signal = new ManualResetEvent(true);
+        private static readonly object m_queueSync = new object();
+        private static volatile bool m_running = true;
 
         private Dictionary<UUID, PollServiceMeshEventArgs> m_pollservices = new Dictionary<UUID, PollServiceMeshEventArgs>();
-
 
         #region Region Module interfaceBase Members
 
@@ -112,7 +109,6 @@ namespace OpenSim.Region.ClientStack.Linden
             // Cap doesn't exist
             if (m_URL != string.Empty)
             {
-                m_Enabled = true;
                 m_RedirectURL = config.GetString("GetMeshRedirectURL");
             }
 
@@ -120,79 +116,82 @@ namespace OpenSim.Region.ClientStack.Linden
             // Cap doesn't exist
             if (m_URL2 != string.Empty)
             {
-                m_Enabled = true;
-
                 m_RedirectURL2 = config.GetString("GetMesh2RedirectURL");
             }
         }
 
         public void AddRegion(Scene pScene)
         {
-            if (!m_Enabled)
-                return;
-
             m_scene = pScene;
 
-            m_assetService = pScene.AssetService;
+            if (m_assetService == null) // Only need to set this once.
+            {
+                m_assetService = pScene.AssetService;
+            }
         }
 
         public void RemoveRegion(Scene scene)
         {
-            if (!m_Enabled)
-                return;
-
             m_scene.EventManager.OnRegisterCaps -= RegisterCaps;
             m_scene.EventManager.OnDeregisterCaps -= DeregisterCaps;
-            m_scene.EventManager.OnThrottleUpdate -= ThrottleUpdate;
+
             m_NumberScenes--;
+
             m_scene = null;
+
+            if (m_NumberScenes <= 0)
+            {
+                m_running = false;
+            }
         }
 
         public void RegionLoaded(Scene scene)
         {
-            if (!m_Enabled)
-                return;
-
-            m_AssetService = m_scene.RequestModuleInterface<IAssetService>();
             m_scene.EventManager.OnRegisterCaps += RegisterCaps;
-            // We'll reuse the same handler for all requests.
-            m_getMeshHandler = new GetMeshHandler(m_assetService);
             m_scene.EventManager.OnDeregisterCaps += DeregisterCaps;
-            m_scene.EventManager.OnThrottleUpdate += ThrottleUpdate;
 
             m_NumberScenes++;
+            m_running = true;
 
-            if (m_workerThreads == null)
+            if (m_assetService == null) // Only need to set this once.
             {
-                m_workerThreads = new Thread[2];
+                m_assetService = m_scene.AssetService;
+            }
 
-                for (uint i = 0; i < 2; i++)
+            if (m_NumberScenes == 1)
+            {
+                for (int i = 1; i <= 2; i++)
                 {
-                    m_workerThreads[i] = WorkManager.StartThread(DoMeshRequests,
-                            String.Format("GetMeshWorker{0}", i),
-                            ThreadPriority.Normal,
-                            true,
-                            false,
-                            null,
-                            int.MaxValue);
+                    Util.FireAndForget(
+                        delegate
+                        {
+                        // We give each thread its own handler.
+                        GetMeshHandler getMeshHandler = new GetMeshHandler(m_assetService);
+                            DoMeshRequests(getMeshHandler);
+                        }, null,
+                        String.Format("GetMeshWorker{0}",i), false);
                 }
             }
         }
 
         public void Close()
         {
-            if(m_NumberScenes <= 0 && m_workerThreads != null)
+            if (m_NumberScenes <= 0)
             {
                 m_log.DebugFormat("[GetMeshModule] Closing");
-                foreach (Thread t in m_workerThreads)
-                    Watchdog.AbortThread(t.ManagedThreadId);
-                // This will fail on region shutdown. Its harmless.
-                // Prevent red ink.
+
                 try
                 {
-                    m_queue.Clear();
+                    lock (m_queueSync)
+                    {
+                        m_running = false;
+                        m_queue.Clear();
+
+                        // Wake the threads so they will notice m_running = false and end.
+                        m_signal.Set();
+                    }
                 }
-                catch {}
+                catch { }
             }
         }
 
@@ -200,28 +199,56 @@ namespace OpenSim.Region.ClientStack.Linden
 
         #endregion
 
-        private static void DoMeshRequests()
+        private static bool TryDequeue(out aPollRequest poolreq)
         {
-            while(true)
+            lock (m_queueSync)
             {
-                aPollRequest poolreq = m_queue.Dequeue(4500);
-                Watchdog.UpdateThread();
-                if(m_NumberScenes <= 0)
-                    return;
-                if(poolreq.reqID != UUID.Zero)
-                    poolreq.thepoll.Process(poolreq);
+                if (m_running)
+                {
+                    if (m_queue.Count > 0)
+                    {
+                        poolreq = m_queue.Dequeue();
+                        return true;
+                    }
+                    
+                    try
+                    {
+                        // Reset flag to wait for a new request.
+                        m_signal.Reset();
+                    }
+                    catch { }
+                }
             }
+
+            // Wait until there are new requests.
+            // We want to wait outside of the lock.
+            if (m_running)
+                try
+                {
+                    m_signal.WaitOne();
+                }
+                catch { }
+
+            poolreq = new aPollRequest();
+            return false;
         }
 
-        // Now we know when the throttle is changed by the client in the case of a root agent or by a neighbor region in the case of a child agent.
-        public void ThrottleUpdate(ScenePresence p)
+        private static void DoMeshRequests( GetMeshHandler getHandler )
         {
-            UUID user = p.UUID;
-            int imagethrottle = p.ControllingClient.GetAgentThrottleSilent((int)ThrottleOutPacketType.Asset);
-            PollServiceMeshEventArgs args;
-            if (m_pollservices.TryGetValue(user, out args))
+            while (m_running )
             {
-                args.UpdateThrottle(imagethrottle);
+                aPollRequest poolreq;
+                if (TryDequeue(out poolreq))
+                {
+                    try
+                    {
+                         poolreq.thepoll.Process(poolreq, getHandler);
+
+                        // Make sure the thread stays awake while there are requests.
+                        m_signal.Set();
+                    }
+                    catch { }
+                }
             }
         }
 
@@ -233,21 +260,16 @@ namespace OpenSim.Region.ClientStack.Linden
                     new Dictionary<UUID, aPollResponse>();
 
             private Scene m_scene;
-            private MeshCapsDataThrottler m_throttler;
+
             public PollServiceMeshEventArgs(string uri, UUID pId, Scene scene) :
                 base(null, uri, null, null, null, pId, int.MaxValue)
             {
                 m_scene = scene;
-                m_throttler = new MeshCapsDataThrottler(100000);
                 // x is request id, y is userid
                 HasEvents = (x, y) =>
                 {
                     lock (responses)
-                    {
-                        bool ret = m_throttler.hasEvents(x, responses);
-                        return ret;
-
-                    }
+                         return responses.ContainsKey(x);
                 };
                 GetEvents = (x, y) =>
                 {
@@ -260,32 +282,30 @@ namespace OpenSim.Region.ClientStack.Linden
                         finally
                         {
                             responses.Remove(x);
-                            m_throttler.PassTime();
                         }
                     }
                 };
                 // x is request id, y is request data hashtable
                 Request = (x, y) =>
                 {
-                    aPollRequest reqinfo = new aPollRequest();
-                    reqinfo.thepoll = this;
-                    reqinfo.reqID = x;
-                    reqinfo.request = y;
+                    if (x != UUID.Zero)
+                    {
+                        aPollRequest reqinfo = new aPollRequest();
+                        reqinfo.thepoll = this;
+                        reqinfo.reqID = x;
+                        reqinfo.request = y;
 
-                    m_queue.Enqueue(reqinfo);
-                    m_throttler.PassTime();
+                        lock (m_queueSync)
+                        {
+                            m_queue.Enqueue(reqinfo);
+                            m_signal.Set();
+                        }
+                    }
                 };
 
                 // this should never happen except possible on shutdown
                 NoEvents = (x, y) =>
                 {
-                    /*
-                                        lock (requests)
-                                        {
-                                            Hashtable request = requests.Find(id => id["RequestID"].ToString() == x.ToString());
-                                            requests.Remove(request);
-                                        }
-                    */
                     Hashtable response = new Hashtable();
 
                     response["int_response_code"] = 500;
@@ -298,16 +318,16 @@ namespace OpenSim.Region.ClientStack.Linden
                 };
             }
 
-            public void Process(aPollRequest requestinfo)
+            public void Process(aPollRequest requestinfo, GetMeshHandler getHandler)
             {
                 Hashtable response;
 
                 UUID requestID = requestinfo.reqID;
 
-                if(m_scene.ShuttingDown)
+                if (m_scene.ShuttingDown)
                     return;
 
-                // If the avatar is gone, don't bother to get the texture
+                // If the avatar is gone, don't bother to get the mesh
                 if (m_scene.GetScenePresence(Id) == null)
                 {
                     response = new Hashtable();
@@ -324,26 +344,16 @@ namespace OpenSim.Region.ClientStack.Linden
                     return;
                 }
 
-                response = m_getMeshHandler.Handle(requestinfo.request);
+                response = getHandler.Handle(requestinfo.request);
                 lock (responses)
                 {
                     responses[requestID] = new aPollResponse()
                     {
                         bytes = (int)response["int_bytes"],
                         lod = (int)response["int_lod"],
-                        response = response
+                        response = response,
                     };
-
                 }
-                m_throttler.PassTime();
-            }
-
-            internal void UpdateThrottle(int pthrottle)
-            {
-                int tmp = 2 * pthrottle;
-                if(tmp < 10000)
-                    tmp = 10000;
-                m_throttler.ThrottleBytes = tmp;
             }
         }
 
@@ -393,64 +403,6 @@ namespace OpenSim.Region.ClientStack.Linden
             {
                 m_pollservices.Remove(agentID);
             }
-        }
-
-        internal sealed class MeshCapsDataThrottler
-        {
-            private double lastTimeElapsed = 0;
-            private double BytesSent = 0;
-
-            public MeshCapsDataThrottler(int pBytes)
-            {
-                if(pBytes < 10000)
-                    pBytes = 10000;
-                ThrottleBytes = pBytes;
-                lastTimeElapsed = Util.GetTimeStampMS();
-            }
-
-            public bool hasEvents(UUID key, Dictionary<UUID, aPollResponse> responses)
-            {
-                PassTime();
-                // Note, this is called IN LOCK
-                bool haskey = responses.ContainsKey(key);
-
-                if (!haskey)
-                {
-                    return false;
-                }
-                aPollResponse response;
-                if (responses.TryGetValue(key, out response))
-                {
-                    // Normal
-                    if (BytesSent <= ThrottleBytes)
-                    {
-                        BytesSent += response.bytes;
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                }
-                return haskey;
-            }
-
-            public void PassTime()
-            {
-                double currenttime = Util.GetTimeStampMS();
-                double timeElapsed = currenttime - lastTimeElapsed;
-                if(timeElapsed < 50.0)
-                    return;
-                int add = (int)(ThrottleBytes * timeElapsed * 0.001);
-                if (add >= 1000)
-                {
-                    lastTimeElapsed = currenttime;
-                    BytesSent -= add;
-                    if (BytesSent < 0) BytesSent = 0;
-                }
-            }
-
-            public int ThrottleBytes;
         }
     }
 }
