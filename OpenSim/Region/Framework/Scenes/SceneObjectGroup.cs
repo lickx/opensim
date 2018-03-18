@@ -2790,7 +2790,7 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 ScenePresence avatar = m_scene.GetScenePresence(AttachedAvatar);
 
-                if (avatar != null)
+                if (avatar != null && !avatar.IsSatOnObject)
                     avatar.MoveToTarget(target, false, false, tau);
             }
             else
