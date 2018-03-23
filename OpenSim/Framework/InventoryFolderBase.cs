@@ -52,7 +52,7 @@ namespace OpenSim.Framework
         /// because of the changes clients have with inventory from
         /// time to time (1.19.1 caused us some fits there).
         /// </summary>
-        private uint _version;
+        private int _version;
 
         public virtual UUID ParentID
         {
@@ -66,7 +66,7 @@ namespace OpenSim.Framework
             set { _type = value; }
         }
 
-        public virtual uint Version
+        public virtual int Version
         {
             get { return _version; }
             set { _version = value; }
@@ -93,7 +93,7 @@ namespace OpenSim.Framework
         }
 
         public InventoryFolderBase(
-            UUID id, string name, UUID owner, short type, UUID parent, uint version) : this(id, name, owner, parent)
+            UUID id, string name, UUID owner, short type, UUID parent, int version) : this(id, name, owner, parent)
         {
             Type = type;
             Version = version;

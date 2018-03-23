@@ -411,7 +411,7 @@ namespace OpenSim.Capabilities.Handlers
                     //    "[WEB FETCH INV DESC HANDLER]: Retrieved folder {0} {1} for agent id {2}",
                     //    containingFolder.Name, containingFolder.ID, agentID);
 
-                    version = (int)containingFolder.Version;
+                    version = containingFolder.Version;
 
                     if (fetchItems && containingFolder.Type != (short)FolderType.Trash)
                     {
@@ -570,7 +570,7 @@ from docs seems this was never a spec
                         ret.Collection.Items = fold.RequestListOfItems();
                         ret.Collection.OwnerID = m_LibraryService.LibraryRootFolder.Owner;
                         ret.Collection.FolderID = f.folder_id;
-                        ret.Collection.Version = (int)fold.Version;
+                        ret.Collection.Version = fold.Version;
 
                         ret.Descendents = ret.Collection.Items.Count;
                         result.Add(ret);
@@ -662,7 +662,7 @@ from docs seems this was never a spec
                 {
                     contents.FolderID = containingFolder.ID;
                     contents.OwnerID = containingFolder.Owner;
-                    contents.Version = (int)containingFolder.Version;
+                    contents.Version = containingFolder.Version;
                 }
                 else
                 {

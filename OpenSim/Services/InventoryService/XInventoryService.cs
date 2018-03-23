@@ -318,7 +318,7 @@ namespace OpenSim.Services.InventoryService
             InventoryFolderBase f = GetFolder(principalID, folderID);
             if (f != null)
             {
-                inventory.Version = (int)f.Version;
+                inventory.Version = f.Version;
                 inventory.OwnerID = f.Owner;
             }
             inventory.FolderID = folderID;
@@ -426,7 +426,7 @@ namespace OpenSim.Services.InventoryService
             }
 
             if (xFolder.version < check.Version)
-                xFolder.version = (int)check.Version;
+                xFolder.version = check.Version;
 
             xFolder.folderID = check.ID;
 

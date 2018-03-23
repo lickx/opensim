@@ -740,7 +740,7 @@ namespace OpenSim.Services.Connectors
             {
                 folder.ParentID = new UUID(data["ParentID"].ToString());
                 folder.Type = short.Parse(data["Type"].ToString());
-                folder.Version = uint.Parse(data["Version"].ToString());
+                folder.Version = int.Parse(data["Version"].ToString());
                 folder.Name = data["Name"].ToString();
                 folder.Owner = new UUID(data["Owner"].ToString());
                 folder.ID = new UUID(data["ID"].ToString());
