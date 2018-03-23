@@ -795,6 +795,7 @@ from docs seems this was never a spec
             llsdFolder.parent_id = invFolder.ParentID;
             llsdFolder.name = invFolder.Name;
             llsdFolder.type = invFolder.Type;
+            llsdFolder.version = invFolder.Version;
             llsdFolder.preferred_type = -1;
 
             return llsdFolder;
