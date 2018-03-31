@@ -1549,6 +1549,8 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             CrossAsyncDelegate icon = (CrossAsyncDelegate)iar.AsyncState;
             ScenePresence agent = icon.EndInvoke(iar);
 
+            if(agent == null || agent.IsDeleted)
+                return;
 
             if(!agent.IsChildAgent)
             {
@@ -1576,7 +1578,7 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
                                                             ctx, out newpos, out failureReason);
             if (neighbourRegion == null)
             {
-                if (failureReason != String.Empty)
+                if (!agent.IsDeleted && failureReason != String.Empty && agent.ControllingClient != null)
                     agent.ControllingClient.SendAlertMessage(failureReason);
                 return agent;
             }
