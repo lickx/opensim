@@ -309,7 +309,7 @@ namespace OpenSim
             configSource.AddSwitch("Startup", "console");
             configSource.AddSwitch("Startup", "save_crashes");
             configSource.AddSwitch("Startup", "crash_dir");
-            configSource.AddSwitch("Startup", "pidfile");
+            configSource.AddSwitch("Startup", "PIDFile");
             configSource.AddSwitch("Startup", "regionload_regionfile");
 
             configSource.AddConfig("StandAlone");
