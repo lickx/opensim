@@ -270,13 +270,15 @@ namespace OpenSim.Region.ScriptEngine.Shared
             // Vector-Rotation Math
             public static Vector3 operator *(Vector3 v, Quaternion r)
             {
-                Quaternion vq = new Quaternion(v.x, v.y, v.z, 0);
-                Quaternion nq = new Quaternion(-r.x, -r.y, -r.z, r.s);
+                double rx = r.s * v.x + r.y * v.z - r.z * v.y;
+                double ry = r.s * v.y + r.z * v.x - r.x * v.z;
+                double rz = r.s * v.z + r.x * v.y - r.y * v.x;
 
-                // adapted for operator * computing "b * a"
-                Quaternion result = nq * (vq * r);
+                v.x += 2.0f * (rz * r.y - ry * r.z);
+                v.y += 2.0f * (rx * r.z - rz * r.x);
+                v.z += 2.0f * (ry * r.x - rx * r.y);
 
-                return new Vector3(result.x, result.y, result.z);
+                return v;
             }
 
             public static Vector3 operator /(Vector3 v, Quaternion r)
@@ -385,8 +387,8 @@ namespace OpenSim.Region.ScriptEngine.Shared
             #region Methods
             public Quaternion Normalize()
             {
-                double length = Math.Sqrt(x * x + y * y + z * z + s * s);
-                if (length < float.Epsilon)
+                double lengthsq = x * x + y * y + z * z + s * s;
+                if (lengthsq < float.Epsilon)
                 {
                     x = 0;
                     y = 0;
@@ -396,7 +398,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
                 else
                 {
 
-                    double invLength = 1.0 / length;
+                    double invLength = 1.0 / Math.Sqrt(lengthsq);
                     x *= invLength;
                     y *= invLength;
                     z *= invLength;
@@ -467,7 +469,8 @@ namespace OpenSim.Region.ScriptEngine.Shared
             {
                 // LSL quaternions can normalize to 0, normal Quaternions can't.
                 if (rot.s == 0 && rot.x == 0 && rot.y == 0 && rot.z == 0)
-                    rot.z = 1; // ZERO_ROTATION = 0,0,0,1
+                    return OMV_Quaternion.Identity; // ZERO_ROTATION = 0,0,0,1
+
                 OMV_Quaternion omvrot = new OMV_Quaternion((float)rot.x, (float)rot.y, (float)rot.z, (float)rot.s);
                 omvrot.Normalize();
                 return omvrot;
@@ -503,6 +506,7 @@ namespace OpenSim.Region.ScriptEngine.Shared
 
             public static Quaternion operator /(Quaternion a, Quaternion b)
             {
+                // assuming normalized
                 b.s = -b.s;
                 return a * b;
             }

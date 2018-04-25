@@ -5963,7 +5963,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             #endregion PrimFlags
 
-            if (part.Sound != UUID.Zero)
+            if (part.Sound != UUID.Zero || part.SoundFlags != 0)
             {
                 update.Sound = part.Sound;
                 update.OwnerID = part.OwnerID;
