@@ -1722,10 +1722,10 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                                 data = OpenJPEG.EncodeFromImage(scaledbmp, true);
                         }
                         else
-                            data = OpenJPEG.EncodeFromImage(mapbmp, true);
+                            data = OpenJPEG.EncodeFromImage(mapbmp, false);
                     }
                     else
-                        data = OpenJPEG.EncodeFromImage(mapbmp, true);
+                        data = OpenJPEG.EncodeFromImage(mapbmp, false);
 
                     if (data != null && data.Length > 0)
                     {

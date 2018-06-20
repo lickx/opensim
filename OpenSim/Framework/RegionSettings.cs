@@ -109,10 +109,10 @@ namespace OpenSim.Framework
         /// <value>
         /// These appear to be terrain textures that are shipped with the client.
         /// </value>
-        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_1 = new UUID("b8d3965a-ad78-bf43-699b-bff8eca6c975");
-        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_2 = new UUID("abb783e6-3e93-26c0-248a-247666855da3");
-        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_3 = new UUID("179cdabd-398a-9b6b-1391-4dc333ba321f");
-        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_4 = new UUID("beb169c7-11ea-fff2-efe5-0f24dc881df2");
+        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_1 = new UUID("0bc58228-74a0-7e83-89bc-5c23464bcec5");
+        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_2 = new UUID("63338ede-0037-c4fd-855b-015d77112fc8");
+        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_3 = new UUID("303cd381-8560-7579-23f1-f0a880799740");
+        public static readonly UUID DEFAULT_TERRAIN_TEXTURE_4 = new UUID("53a2f406-4895-1d13-d541-d2e3b86bc19c");
 
         public void Save()
         {

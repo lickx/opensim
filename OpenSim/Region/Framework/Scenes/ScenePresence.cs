@@ -3093,7 +3093,7 @@ namespace OpenSim.Region.Framework.Scenes
 
             terrainHeight += Appearance.AvatarHeight; // so 1.5 * AvatarHeight above ground at target
             bool shouldfly = Flying;
-            if (noFly)
+            if (noFly || !landAtTarget)
                 shouldfly = false;
             else if (pos.Z > terrainHeight || Flying)
                 shouldfly = true;
