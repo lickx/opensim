@@ -1,4 +1,5 @@
-/*
+/* 11 feb 2018
+ * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -57,12 +58,8 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
         private int m_sendtime = 2; // seconds to wait before sending changed appearance
         private bool m_reusetextures = false;
 
-        private int m_checkTime = 500; // milliseconds to wait between checks for appearance updates
-        private System.Timers.Timer m_updateTimer = new System.Timers.Timer();
-        private Dictionary<UUID,long> m_savequeue = new Dictionary<UUID,long>();
-        private Dictionary<UUID,long> m_sendqueue = new Dictionary<UUID,long>();
-
-        private object m_setAppearanceLock = new object();
+        private static HashSet<UUID> m_savequeue = new HashSet<UUID>();
+        private static HashSet<UUID> m_sendqueue = new HashSet<UUID>();
 
         #region Region Module interface
 
@@ -79,6 +76,9 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
                 // m_log.InfoFormat("[AVFACTORY] configured for {0} save and {1} send",m_savetime,m_sendtime);
             }
 
+            // 1000 miliseconds per second
+            m_savetime = m_savetime * 1000;
+            m_sendtime = m_sendtime * 1000;
         }
 
         public void AddRegion(Scene scene)
@@ -88,6 +88,7 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
 
             scene.RegisterModuleInterface<IAvatarFactoryModule>(this);
             scene.EventManager.OnNewClient += SubscribeToClientEvents;
+            scene.EventManager.OnRemovePresence += RemovePresenceEvent;
         }
 
         public void RemoveRegion(Scene scene)
@@ -96,6 +97,7 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             {
                 scene.UnregisterModuleInterface<IAvatarFactoryModule>(this);
                 scene.EventManager.OnNewClient -= SubscribeToClientEvents;
+                scene.EventManager.OnRemovePresence -= RemovePresenceEvent;
             }
 
             m_scene = null;
@@ -103,10 +105,6 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
 
         public void RegionLoaded(Scene scene)
         {
-            m_updateTimer.Enabled = false;
-            m_updateTimer.AutoReset = true;
-            m_updateTimer.Interval = m_checkTime; // 500 milliseconds wait to start async ops
-            m_updateTimer.Elapsed += new ElapsedEventHandler(HandleAppearanceUpdateTimer);
         }
 
         public void Close()
@@ -128,13 +126,35 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             get { return null; }
         }
 
-
         private void SubscribeToClientEvents(IClientAPI client)
         {
             client.OnRequestWearables += Client_OnRequestWearables;
             client.OnSetAppearance += Client_OnSetAppearance;
             client.OnAvatarNowWearing += Client_OnAvatarNowWearing;
             client.OnCachedTextureRequest += Client_OnCachedTextureRequest;
+        }
+
+        private void RemovePresenceEvent(UUID agentid)
+        {
+            // This precaution is not needed except in the highly unlikely case
+            // that race conditions prevent the fired save/send threads from finishing.
+            // In such a case you would want to make sure the agentid is not stuck
+            // in the save/send queue forever. So remove it from the queues
+            // when the agent leaves the scene.
+
+            try
+            {
+                lock (m_savequeue)
+                {
+                    m_savequeue.Remove(agentid);
+                }
+
+                lock (m_sendqueue)
+                {
+                    m_sendqueue.Remove(agentid);
+                }
+            }
+            catch { }
         }
 
         #endregion
@@ -183,7 +203,7 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
 
             // Process the texture entry transactionally, this doesn't guarantee that Appearance is
             // going to be handled correctly but it does serialize the updates to the appearance
-            lock (m_setAppearanceLock)
+            lock (sp.AppearanceSyncLock)
             {
                 // Process the visual params, this may change height as well
                 if (visualParams != null)
@@ -334,28 +354,42 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
         /// <param name="agentId"></param>
         public void QueueAppearanceSend(UUID agentid)
         {
-//            m_log.DebugFormat("[AVFACTORY]: Queue appearance send for {0}", agentid);
-
-            // 10000 ticks per millisecond, 1000 milliseconds per second
-            long timestamp = DateTime.Now.Ticks + Convert.ToInt64(m_sendtime * 1000 * 10000);
             lock (m_sendqueue)
+                // Add() returns false when agentid is already in m_sendqueue.
+                if (!m_sendqueue.Add(agentid)) return;
+
+            Util.FireAndForget(delegate
             {
-                m_sendqueue[agentid] = timestamp;
-                m_updateTimer.Start();
-            }
+                Thread.Sleep(m_sendtime);
+                try
+                {
+                    lock (m_sendqueue)
+                                m_sendqueue.Remove(agentid);
+
+                            SendAppearance(agentid);
+                    }
+                catch { return; }
+            }, null, "SendApp" + agentid.ToString(), false);            
         }
 
         public void QueueAppearanceSave(UUID agentid)
         {
-//            m_log.DebugFormat("[AVFACTORY]: Queueing appearance save for {0}", agentid);
-
-            // 10000 ticks per millisecond, 1000 milliseconds per second
-            long timestamp = DateTime.Now.Ticks + Convert.ToInt64(m_savetime * 1000 * 10000);
             lock (m_savequeue)
+                // Add() returns false when agentid is already in m_savequeue.
+                if (!m_savequeue.Add(agentid)) return;
+
+            Util.FireAndForget(delegate
             {
-                m_savequeue[agentid] = timestamp;
-                m_updateTimer.Start();
-            }
+                Thread.Sleep(m_savetime);
+                try
+                {
+                    lock (m_savequeue)
+                        m_savequeue.Remove(agentid);
+
+                    SaveAppearance(agentid);
+                }
+                catch { return; }
+            }, null, "SaveApp" + agentid.ToString(), false);
         }
 
         // called on textures update
@@ -516,7 +550,7 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             if (((ScenePresence)sp).IsNPC)
                 return true;
 
-            lock (m_setAppearanceLock)
+            lock (sp.AppearanceSyncLock)
             {
                 IAssetCache cache = m_scene.RequestModuleInterface<IAssetCache>();
                 IBakedTextureModule bakedModule = m_scene.RequestModuleInterface<IBakedTextureModule>();
@@ -693,7 +727,6 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
                 }
 
                 sp.Appearance.WearableCacheItems = wearableCache;
-
             }
 
             // debug
@@ -792,55 +825,6 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
             return bakedTextures;
         }
 
-        private void HandleAppearanceUpdateTimer(object sender, EventArgs ea)
-        {
-            long now = DateTime.Now.Ticks;
-
-            lock (m_sendqueue)
-            {
-                Dictionary<UUID, long> sends = new Dictionary<UUID, long>(m_sendqueue);
-                foreach (KeyValuePair<UUID, long> kvp in sends)
-                {
-                    // We have to load the key and value into local parameters to avoid a race condition if we loop
-                    // around and load kvp with a different value before FireAndForget has launched its thread.
-                    UUID avatarID = kvp.Key;
-                    long sendTime = kvp.Value;
-
-//                    m_log.DebugFormat("[AVFACTORY]: Handling queued appearance updates for {0}, update delta to now is {1}", avatarID, sendTime - now);
-
-                    if (sendTime < now)
-                    {
-                        Util.FireAndForget(o => SendAppearance(avatarID), null, "AvatarFactoryModule.SendAppearance");
-                        m_sendqueue.Remove(avatarID);
-                    }
-                }
-            }
-
-            lock (m_savequeue)
-            {
-                Dictionary<UUID, long> saves = new Dictionary<UUID, long>(m_savequeue);
-                foreach (KeyValuePair<UUID, long> kvp in saves)
-                {
-                    // We have to load the key and value into local parameters to avoid a race condition if we loop
-                    // around and load kvp with a different value before FireAndForget has launched its thread.
-                    UUID avatarID = kvp.Key;
-                    long sendTime = kvp.Value;
-
-                    if (sendTime < now)
-                    {
-                        Util.FireAndForget(o => SaveAppearance(avatarID), null, "AvatarFactoryModule.SaveAppearance");
-                        m_savequeue.Remove(avatarID);
-                    }
-                }
-
-                // We must lock both queues here so that QueueAppearanceSave() or *Send() don't m_updateTimer.Start() on
-                // another thread inbetween the first count calls and m_updateTimer.Stop() on this thread.
-                lock (m_sendqueue)
-                    if (m_savequeue.Count == 0 && m_sendqueue.Count == 0)
-                        m_updateTimer.Stop();
-            }
-        }
-
         private void SaveAppearance(UUID agentid)
         {
             // We must set appearance parameters in the en_US culture in order to avoid issues where values are saved
@@ -856,25 +840,29 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
                 return;
             }
 
-//            m_log.DebugFormat("[AVFACTORY]: Saving appearance for avatar {0}", agentid);
+            //            m_log.DebugFormat("[AVFACTORY]: Saving appearance for avatar {0}", agentid);
 
             // This could take awhile since it needs to pull inventory
             // We need to do it at the point of save so that there is a sufficient delay for any upload of new body part/shape
             // assets and item asset id changes to complete.
             // I don't think we need to worry about doing this within m_setAppearanceLock since the queueing avoids
-            // multiple save requests.
-            SetAppearanceAssets(sp.UUID, sp.Appearance);
+            // multiple save requests. ... 
 
-//            List<AvatarAttachment> attachments = sp.Appearance.GetAttachments();
-//            foreach (AvatarAttachment att in attachments)
-//            {
-//                m_log.DebugFormat(
-//                    "[AVFACTORY]: For {0} saving attachment {1} at point {2}",
-//                    sp.Name, att.ItemID, att.AttachPoint);
-//            }
+            // Using the the individual sp.AppearanceSyncLock should be safe.
+            lock (sp.AppearanceSyncLock)
+            {
+                SetAppearanceAssets(sp.UUID, sp.Appearance);
 
-            m_scene.AvatarService.SetAppearance(agentid, sp.Appearance);
+                //            List<AvatarAttachment> attachments = sp.Appearance.GetAttachments();
+                //            foreach (AvatarAttachment att in attachments)
+                //            {
+                //                m_log.DebugFormat(
+                //                    "[AVFACTORY]: For {0} saving attachment {1} at point {2}",
+                //                    sp.Name, att.ItemID, att.AttachPoint);
+                //            }
 
+                m_scene.AvatarService.SetAppearance(agentid, sp.Appearance);
+            }    
             // Trigger this here because it's the final step in the set/queue/save process for appearance setting.
             // Everything has been updated and stored. Ensures bakes have been persisted (if option is set to persist bakes).
             m_scene.EventManager.TriggerAvatarAppearanceChanged(sp);
@@ -1207,11 +1195,34 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
         /// <param name="client"></param>
         private void Client_OnRequestWearables(IClientAPI client)
         {
+            try
+            {
+                new Thread(delegate ()
+                {
+                    Thread.Sleep(4000);
+                    try
+                    {
+                        ScenePresence sp = m_scene.GetScenePresence(client.AgentId);
+                        if (sp != null)
+                            client.SendWearables(sp.Appearance.Wearables, sp.Appearance.Serial++);
+                        else
+                            m_log.WarnFormat("[AVFACTORY]: Client_OnRequestWearables unable to find presence for {0}", client.AgentId);
+                    }
+                    catch { return; }
+                }).Start();
+
+                return; // Done.
+            }
+            catch
+            {
+
+            }
+
+            // Creating a thread failed now let the ThreadPool deal with it. 
             Util.FireAndForget(delegate(object x)
             {
                 Thread.Sleep(4000);
 
-                // m_log.DebugFormat("[AVFACTORY]: Client_OnRequestWearables called for {0} ({1})", client.Name, client.AgentId);
                 ScenePresence sp = m_scene.GetScenePresence(client.AgentId);
                 if (sp != null)
                     client.SendWearables(sp.Appearance.Wearables, sp.Appearance.Serial++);
@@ -1274,19 +1285,17 @@ namespace OpenSim.Region.CoreModules.Avatar.AvatarFactory
 
             avatAppearance.GetAssetsFrom(sp.Appearance);
 
-            lock (m_setAppearanceLock)
+            lock (sp.AppearanceSyncLock)
             {
                 // Update only those fields that we have changed. This is important because the viewer
                 // often sends AvatarIsWearing and SetAppearance packets at once, and AvatarIsWearing
                 // shouldn't overwrite the changes made in SetAppearance.
                 sp.Appearance.Wearables = avatAppearance.Wearables;
                 sp.Appearance.Texture = avatAppearance.Texture;
-
-                // We don't need to send the appearance here since the "iswearing" will trigger a new set
-                // of visual param and baked texture changes. When those complete, the new appearance will be sent
-
-                QueueAppearanceSave(client.AgentId);
             }
+            // We don't need to send the appearance here since the "iswearing" will trigger a new set
+            // of visual param and baked texture changes. When those complete, the new appearance will be sent
+            QueueAppearanceSave(client.AgentId);
         }
 
         /// <summary>

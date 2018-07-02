@@ -1,4 +1,5 @@
-/*
+/* 14 feb 2018
+ * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -116,6 +117,8 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                     string[] names = words[0].Split(new char[] { '.' });
                     if (names.Length >= 2)
                     {
+                        // bit late here but lets give it a go.
+                        URLCheck.SubmitForcheck(words[1]);
 
                         string uriStr = "http://" + words[1];
                         // Let's check that the last name is a valid address
@@ -129,33 +132,41 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                             return;
                         }
 
-                        UserAgentServiceConnector uasConn = new UserAgentServiceConnector(uriStr);
+                        bool known = false;
+                        // Here is were we finally put the URL checker to its use.
+                        // Invalid domains do not get contacted, which prevents some issues.
+                        // But when we do not know if they are invalid (yet),
+                        // then we will have to try. In that case Known is false.
+                        if (URLCheck.isValid(words[1], out known) || !known)
+                        {
+                            UserAgentServiceConnector uasConn = new UserAgentServiceConnector(uriStr);
 
-                        UUID userID = UUID.Zero;
-                        try
-                        {
-                            userID = uasConn.GetUUID(names[0], names[1]);
-                        }
-                        catch (Exception e)
-                        {
-                            m_log.Debug("[USER MANAGEMENT MODULE]: GetUUID call failed ", e);
-                        }
+                            UUID userID = UUID.Zero;
+                            try
+                            {
+                                userID = uasConn.GetUUID(names[0], names[1]);
+                            }
+                            catch (Exception e)
+                            {
+                                m_log.Debug("[USER MANAGEMENT MODULE]: GetUUID call failed ", e);
+                            }
 
-                        if (!userID.Equals(UUID.Zero))
-                        {
-                            UserData ud = new UserData();
-                            ud.Id = userID;
-                            ud.FirstName = words[0];
-                            ud.LastName = "@" + words[1];
-                            users.Add(ud);
-                            // WARNING! that uriStr is not quite right... it may be missing the / at the end,
-                            // which will cause trouble (duplicate entries on some tables). We should
-                            // get the UUI instead from the UAS. TO BE FIXED.
-                            AddUser(userID, names[0], names[1], uriStr);
-                            m_log.DebugFormat("[USER MANAGEMENT MODULE]: User {0}@{1} found", words[0], words[1]);
+                            if (!userID.Equals(UUID.Zero))
+                            {
+                                UserData ud = new UserData();
+                                ud.Id = userID;
+                                ud.FirstName = words[0];
+                                ud.LastName = "@" + words[1];
+                                users.Add(ud);
+                                // WARNING! that uriStr is not quite right... it may be missing the / at the end,
+                                // which will cause trouble (duplicate entries on some tables). We should
+                                // get the UUI instead from the UAS. TO BE FIXED.
+                                AddUser(userID, names[0], names[1], uriStr);
+                                m_log.DebugFormat("[USER MANAGEMENT MODULE]: User {0}@{1} found", words[0], words[1]);
+                            }
+                            else
+                                m_log.DebugFormat("[USER MANAGEMENT MODULE]: User {0}@{1} not found", words[0], words[1]);
                         }
-                        else
-                            m_log.DebugFormat("[USER MANAGEMENT MODULE]: User {0}@{1} not found", words[0], words[1]);
                     }
                 }
             }

@@ -1,4 +1,5 @@
-/*
+/* 13 feb 2018
+ * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -1224,8 +1225,11 @@ namespace OpenSim.Region.CoreModules.Framework.InventoryAccess
         protected void AddUserData(SceneObjectGroup sog)
         {
             UserManagementModule.AddUser(sog.RootPart.CreatorID, sog.RootPart.CreatorData);
-            foreach (SceneObjectPart sop in sog.Parts)
-                UserManagementModule.AddUser(sop.CreatorID, sop.CreatorData);
+            Util.FireAndForget(delegate
+            {
+               foreach (SceneObjectPart sop in sog.Parts)
+                   UserManagementModule.AddUser(sop.CreatorID, sop.CreatorData);
+            }, null, "", false);
         }
 
         public virtual void TransferInventoryAssets(InventoryItemBase item, UUID sender, UUID receiver)
@@ -1315,8 +1319,12 @@ namespace OpenSim.Region.CoreModules.Framework.InventoryAccess
             InventoryItemBase item = invService.GetItem(agentID, itemID);
 
             if (item != null && item.CreatorData != null && item.CreatorData != string.Empty)
-                UserManagementModule.AddUser(item.CreatorIdAsUuid, item.CreatorData);
-
+            {
+                Util.FireAndForget(delegate
+                {
+                    UserManagementModule.AddUser(item.CreatorIdAsUuid, item.CreatorData);
+                }, null, "", false);
+            }
             return item;
         }
 
