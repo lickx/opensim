@@ -372,9 +372,14 @@ namespace OpenSim.Region.ClientStack.Linden
                 response["keepalive"] = false;
                 response["reusecontext"] = false;
 
-                response["str_response_string"] = m_webFetchHandler.FetchInventoryDescendentsRequest(
-                        requestinfo.request["body"].ToString(), String.Empty, String.Empty, null, null);
+//                response["str_response_string"] = m_webFetchHandler.FetchInventoryDescendentsRequest(
+//                        requestinfo.request["body"].ToString(), String.Empty, String.Empty, null, null);
 
+                response["bin_response_data"] = System.Text.Encoding.UTF8.GetBytes(
+                        m_webFetchHandler.FetchInventoryDescendentsRequest(
+                                    requestinfo.request["body"].ToString(),
+                                    String.Empty, String.Empty, null, null)
+                        );
                 lock (responses)
                 {
                     if (responses.ContainsKey(requestID))
