@@ -506,5 +506,24 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
 
         LSL_Integer osTeleportObject(LSL_Key objectUUID, vector targetPos, rotation targetrotation, LSL_Integer flags);
         LSL_Integer osGetLinkNumber(LSL_String name);
+
+        LSL_Float osRound(LSL_Float value, LSL_Integer digits);
+
+        LSL_Float osVecMagSquare(vector a);
+        LSL_Float osVecDistSquare(vector a, vector b);
+        LSL_Float osAngleBetween(vector a, vector b);
+
+        void osAdjustSoundVolume(LSL_Integer linknum, LSL_Float volume);
+        void osLoopSound(LSL_Integer linknum, LSL_String sound, LSL_Float volume);
+        void osLoopSoundMaster(LSL_Integer linknum, LSL_String sound, LSL_Float volume);
+        void osLoopSoundSlave(LSL_Integer linknum, LSL_String sound, LSL_Float volume);
+        void osPlaySound(LSL_Integer linknum, LSL_String sound, LSL_Float volume);
+        void osPlaySoundSlave(LSL_Integer linknum, LSL_String sound, LSL_Float volume);
+        void osPreloadSound(LSL_Integer linknum, LSL_String sound);
+        void osSetSoundRadius(LSL_Integer linknum, LSL_Float radius);
+        void osStopSound(LSL_Integer linknum);
+        void osTriggerSound(LSL_Integer linknum, LSL_String sound, LSL_Float volume);
+        void osTriggerSoundLimited(LSL_Integer linknum, LSL_String sound, LSL_Float volume,
+                 vector top_north_east, vector bottom_south_west);
     }
 }

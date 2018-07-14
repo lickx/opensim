@@ -49,7 +49,6 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
         public static void LoadPrimsFromXml(Scene scene, string fileName, bool newIDS, Vector3 loadOffset)
         {
             XmlDocument doc = new XmlDocument();
-            doc.XmlResolver=null;
             XmlNode rootNode;
 
             if (fileName.StartsWith("http:") || File.Exists(fileName))
@@ -57,7 +56,6 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 using(XmlTextReader reader = new XmlTextReader(fileName))
                 {
                     reader.WhitespaceHandling = WhitespaceHandling.None;
-                    reader.ProhibitDtd = true;
 
                     doc.Load(reader);
                 }

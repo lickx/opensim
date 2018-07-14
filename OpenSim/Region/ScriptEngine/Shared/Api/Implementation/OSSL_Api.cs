@@ -144,6 +144,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         internal bool m_debuggerSafe = false;
         internal Dictionary<string, FunctionPerms > m_FunctionPerms = new Dictionary<string, FunctionPerms >();
         protected IUrlModule m_UrlModule = null;
+        protected ISoundModule m_SoundModule = null;
+        internal IConfig m_osslconfig;
 
         public void Initialize(
             IScriptEngine scriptEngine, SceneObjectPart host, TaskInventoryItem item)
@@ -151,11 +153,17 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_ScriptEngine = scriptEngine;
             m_host = host;
             m_item = item;
+
+            m_osslconfig = m_ScriptEngine.ConfigSource.Configs["OSSL"];
+            if(m_osslconfig == null)
+                m_osslconfig = m_ScriptEngine.Config;
+
             m_debuggerSafe = m_ScriptEngine.Config.GetBoolean("DebuggerSafe", false);
 
             m_UrlModule = m_ScriptEngine.World.RequestModuleInterface<IUrlModule>();
+            m_SoundModule = m_ScriptEngine.World.RequestModuleInterface<ISoundModule>();
 
-            if (m_ScriptEngine.Config.GetBoolean("AllowOSFunctions", false))
+            if (m_osslconfig.GetBoolean("AllowOSFunctions", false))
             {
                 m_OSFunctionsEnabled = true;
                 // m_log.Warn("[OSSL] OSSL FUNCTIONS ENABLED");
@@ -166,7 +174,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_ScriptDistanceFactor =
                     m_ScriptEngine.Config.GetFloat("ScriptDistanceLimitFactor", 1.0f);
 
-            string risk = m_ScriptEngine.Config.GetString("OSFunctionThreatLevel", "VeryLow");
+            string risk = m_osslconfig.GetString("OSFunctionThreatLevel", "VeryLow");
             switch (risk)
             {
             case "NoAccess":
@@ -266,7 +274,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
             if (!m_OSFunctionsEnabled)
-                OSSLError(String.Format("{0} permission denied.  All OS functions are disabled.")); // throws
+                OSSLError("permission denied.  All OS functions are disabled."); // throws
         }
 
         // Returns if the function is allowed. Throws a script exception if not allowed.
@@ -292,8 +300,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 FunctionPerms perms = new FunctionPerms();
                 m_FunctionPerms[function] = perms;
 
-                string ownerPerm = m_ScriptEngine.Config.GetString("Allow_" + function, "");
-                string creatorPerm = m_ScriptEngine.Config.GetString("Creators_" + function, "");
+                string ownerPerm = m_osslconfig.GetString("Allow_" + function, "");
+                string creatorPerm = m_osslconfig.GetString("Creators_" + function, "");
                 if (ownerPerm == "" && creatorPerm == "")
                 {
                     // Default behavior
@@ -4798,6 +4806,244 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             if(sog== null || sog.IsDeleted)
                 return -1;
             return sog.GetLinkNumber(name);
+        }
+
+        // rounds to the nearest number with provided number of decimal places
+        public LSL_Float osRound(LSL_Float value, LSL_Integer ndigits)
+        {
+            if(ndigits <= 0)
+                return Math.Round(value, MidpointRounding.AwayFromZero);
+            if(ndigits > 15)
+                ndigits = 15;
+            return Math.Round(value, ndigits, MidpointRounding.AwayFromZero);
+        }
+
+        public LSL_Float osVecMagSquare(LSL_Vector a)
+        {
+            return LSL_Vector.MagSquare(a);
+        }
+
+        public LSL_Float osVecDistSquare(LSL_Vector a, LSL_Vector b)
+        {
+            return LSL_Vector.MagSquare(a - b);
+        }
+
+        // returns the angle between 2 vectors 0 to pi
+        public LSL_Float osAngleBetween(LSL_Vector a, LSL_Vector b)
+        {
+            double dot = LSL_Vector.Dot(a,b);
+            double mcross = LSL_Vector.Mag(LSL_Vector.Cross(a,b));
+            return Math.Atan2(mcross, dot);
+        }
+
+
+//******* link sound
+       public void osAdjustSoundVolume(LSL_Integer linknum, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+            sop.AdjustSoundGain(volume);
+            ScriptSleep(100);
+        }
+
+        public void osSetSoundRadius(LSL_Integer linknum, LSL_Float radius)
+        {
+            m_host.AddScriptLPS(1);
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+            m_host.SoundRadius = radius;
+        }
+
+        public void osPlaySound(LSL_Integer linknum, LSL_String sound, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            // send the sound, once, to all clients in range
+            m_SoundModule.SendSound(sop.UUID, soundID, volume, false, 0, false, false);
+        }
+
+        public void osLoopSound(LSL_Integer linknum, LSL_String sound, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            m_SoundModule.LoopSound(sop.UUID, soundID, volume, false,false);
+        }
+
+        public void osLoopSoundMaster(LSL_Integer linknum, LSL_String sound, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            m_SoundModule.LoopSound(sop.UUID, soundID, volume, true, false);
+        }
+
+        public void osLoopSoundSlave(LSL_Integer linknum, LSL_String sound, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            m_SoundModule.LoopSound(sop.UUID, soundID, volume, false, true);
+        }
+
+        public void osPlaySoundSlave(LSL_Integer linknum, LSL_String sound, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            // send the sound, once, to all clients in range
+            m_SoundModule.SendSound(sop.UUID, soundID, volume, false, 0, true, false);
+        }
+
+        public void osTriggerSound(LSL_Integer linknum, LSL_String sound, LSL_Float volume)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            // send the sound, once, to all clients in rangeTrigger or play an attached sound in this part's inventory.
+            m_SoundModule.SendSound(sop.UUID, soundID, volume, true, 0, false, false);
+        }
+
+       public void osTriggerSoundLimited(LSL_Integer linknum, LSL_String sound, LSL_Float volume,
+                 LSL_Vector top_north_east, LSL_Vector bottom_south_west)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            m_SoundModule.TriggerSoundLimited(sop.UUID, soundID, volume,
+                        bottom_south_west, top_north_east);
+        }
+
+        public void osStopSound(LSL_Integer linknum)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            m_SoundModule.StopSound(sop.UUID);
+        }
+
+        public void osPreloadSound(LSL_Integer linknum, LSL_String sound)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (m_SoundModule == null)
+                return;
+
+            SceneObjectPart sop = GetSingleLinkPart(linknum);
+            if(sop == null)
+                return;
+
+            UUID soundID = ScriptUtils.GetAssetIdFromKeyOrItemName(sop, sound, AssetType.Sound);
+            if(soundID == UUID.Zero)
+                return;
+
+            m_SoundModule.PreloadSound(sop.UUID, soundID);
+            ScriptSleep(1000);
+        }
+
+        // get only one part
+        private SceneObjectPart GetSingleLinkPart(int linkType)
+        {
+            if (m_host.ParentGroup == null || m_host.ParentGroup.IsDeleted)
+                return null;
+
+            switch (linkType)
+            {
+                case ScriptBaseClass.LINK_SET:
+                case ScriptBaseClass.LINK_ALL_OTHERS:
+                case ScriptBaseClass.LINK_ALL_CHILDREN:
+                    return null;
+
+                case 0:
+                case ScriptBaseClass.LINK_ROOT:
+                    return m_host.ParentGroup.RootPart;
+
+                case ScriptBaseClass.LINK_THIS:
+                    return m_host;
+
+                default:
+                    if(linkType < 0)
+                        return null;
+
+                return m_host.ParentGroup.GetLinkNumPart(linkType);
+            }
         }
     }
 }

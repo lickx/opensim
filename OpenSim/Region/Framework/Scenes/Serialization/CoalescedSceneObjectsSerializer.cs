@@ -133,8 +133,6 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 {
                     using (XmlTextReader reader = new XmlTextReader(sr))
                     {
-                        reader.ProhibitDtd = true;
-
                         reader.MoveToContent(); // skip possible xml declaration
 
                         if (reader.Name != "CoalescedObject")
@@ -149,7 +147,6 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                 }
 
                 XmlDocument doc = new XmlDocument();
-                doc.XmlResolver=null;
                 doc.LoadXml(xml);
                 XmlElement e = (XmlElement)doc.SelectSingleNode("/CoalescedObject");
                 if (e == null)

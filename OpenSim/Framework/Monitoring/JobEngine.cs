@@ -79,7 +79,7 @@ namespace OpenSim.Framework.Monitoring
         /// </remarks>
         private bool m_warnOverMaxQueue = true;
 
-        private BlockingCollection<Job> m_jobQueue = new BlockingCollection<Job>(new ConcurrentQueue<Job>(), 5000);
+        private BlockingCollection<Job> m_jobQueue = new BlockingCollection<Job>(5000);
 
         private CancellationTokenSource m_cancelSource;
 
@@ -238,7 +238,7 @@ namespace OpenSim.Framework.Monitoring
                         break;
                     }
                 }
-                catch(ObjectDisposedException e)
+                catch(ObjectDisposedException)
                 {
                     m_log.DebugFormat("[JobEngine] {0} stopping ignoring {1} jobs in queue",
                         Name,m_jobQueue.Count);

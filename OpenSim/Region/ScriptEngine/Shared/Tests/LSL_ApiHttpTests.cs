@@ -95,7 +95,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Tests
             config.Configs["Network"].Set("ExternalHostNameForLSL", "127.0.0.1");
             m_scene = new SceneHelpers().SetupScene();
 
-            BaseHttpServer server = new BaseHttpServer(port, false, 0, "");
+            BaseHttpServer server = new BaseHttpServer(port);
             MainServer.AddHttpServer(server);
             MainServer.Instance = server;
 
@@ -157,7 +157,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Tests
                     using (HttpWebResponse webResponse = (HttpWebResponse)webRequest.GetResponse())
                     {}
                 }
-                catch (WebException e)
+                catch (WebException)
                 {
 //                    using (HttpWebResponse response = (HttpWebResponse)e.Response)
 //                        gotExpectedException = response.StatusCode == HttpStatusCode.NotFound;

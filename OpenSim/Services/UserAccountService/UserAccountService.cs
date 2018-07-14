@@ -86,29 +86,28 @@ namespace OpenSim.Services.UserAccountService
 
             m_CreateDefaultAvatarEntries = userConfig.GetBoolean("CreateDefaultAvatarEntries", false);
 
-                //  create a system grid god account
-            UserAccount ggod = GetUserAccount(UUID.Zero, UUID_GRID_GOD);
-            if(ggod == null)
-            {
-                UserAccountData d = new UserAccountData();
-
-                d.FirstName = "GRID";
-                d.LastName = "SERVICES";
-                d.PrincipalID = UUID_GRID_GOD;
-                d.ScopeID = UUID.Zero;
-                d.Data = new Dictionary<string, string>();
-                d.Data["Email"] = string.Empty;
-                d.Data["Created"] = Util.UnixTimeSinceEpoch().ToString();
-                d.Data["UserLevel"] = "240";
-                d.Data["UserFlags"] = "0";
-                d.Data["ServiceURLs"] = string.Empty;
-
-                m_Database.Store(d);
-            }
-
             if (m_RootInstance == null)
             {
                 m_RootInstance = this;
+
+                //  create a system grid god account
+                UserAccount ggod = GetUserAccount(UUID.Zero, UUID_GRID_GOD);
+                if(ggod == null)
+                {
+                    UserAccountData d = new UserAccountData();
+                    d.FirstName = "GRID";
+                    d.LastName = "SERVICES";
+                    d.PrincipalID = UUID_GRID_GOD;
+                    d.ScopeID = UUID.Zero;
+                    d.Data = new Dictionary<string, string>();
+                    d.Data["Email"] = string.Empty;
+                    d.Data["Created"] = Util.UnixTimeSinceEpoch().ToString();
+                    d.Data["UserLevel"] = "240";
+                    d.Data["UserFlags"] = "0";
+                    d.Data["ServiceURLs"] = string.Empty;
+
+                    m_Database.Store(d);
+                }
 
                 // In case there are several instances of this class in the same process,
                 // the console commands are only registered for the root instance
@@ -408,7 +407,7 @@ namespace OpenSim.Services.UserAccountService
             else email = cmdparams[5];
 
             if (cmdparams.Length < 7)
-                rawPrincipalId = MainConsole.Instance.CmdPrompt("User ID", UUID.Random().ToString());
+                rawPrincipalId = MainConsole.Instance.CmdPrompt("User ID (enter for random)", "");
             else
                 rawPrincipalId = cmdparams[6];
 
@@ -418,7 +417,9 @@ namespace OpenSim.Services.UserAccountService
                 model = cmdparams[7];
 
             UUID principalId = UUID.Zero;
-            if (!UUID.TryParse(rawPrincipalId, out principalId))
+            if(String.IsNullOrWhiteSpace(rawPrincipalId))
+                principalId = UUID.Random();
+            else if (!UUID.TryParse(rawPrincipalId, out principalId))
                 throw new Exception(string.Format("ID {0} is not a valid UUID", rawPrincipalId));
 
             CreateUser(UUID.Zero, principalId, firstName, lastName, password, email, model);
@@ -847,19 +848,24 @@ namespace OpenSim.Services.UserAccountService
         /// </summary>
         private void CopyWearablesAndAttachments(UUID destination, UUID source, AvatarAppearance avatarAppearance)
         {
+
+            AvatarWearable[] wearables = avatarAppearance.Wearables;
+            if(wearables.Length == 0)
+                throw new Exception("Model does not have wearables");
+
             // Get Clothing folder of receiver
             InventoryFolderBase destinationFolder = m_InventoryService.GetFolderForType(destination, FolderType.Clothing);
+
+            if (destinationFolder == null)
+                throw new Exception("Cannot locate new clothing folder(s)");
+
             // Get Current Outfit folder
             InventoryFolderBase currentOutfitFolder = m_InventoryService.GetFolderForType(destination, FolderType.CurrentOutfit);
 
-            if (destinationFolder == null)
-                throw new Exception("Cannot locate folder(s)");
-
-            // Missing destination folder? This should *never* be the case
+            // wrong destination folder type?  create new
             if (destinationFolder.Type != (short)FolderType.Clothing)
             {
                 destinationFolder = new InventoryFolderBase();
-
                 destinationFolder.ID       = UUID.Random();
                 destinationFolder.Name     = "Clothing";
                 destinationFolder.Owner    = destination;
@@ -867,67 +873,86 @@ namespace OpenSim.Services.UserAccountService
                 destinationFolder.ParentID = m_InventoryService.GetRootFolder(destination).ID;
                 destinationFolder.Version  = 1;
                 m_InventoryService.AddFolder(destinationFolder);     // store base record
-                m_log.ErrorFormat("[USER ACCOUNT SERVICE]: Created folder for destination {0}", source);
+                m_log.ErrorFormat("[USER ACCOUNT SERVICE]: Created folder for destination {0} Clothing", source);
             }
 
             // Wearables
-            AvatarWearable[] wearables = avatarAppearance.Wearables;
-            AvatarWearable wearable;
+            AvatarWearable basewearable;
+            WearableItem wearable;
 
+            AvatarWearable newbasewearable = new AvatarWearable();
+            // copy wearables creating new inventory entries
             for (int i = 0; i < wearables.Length; i++)
             {
-                wearable = wearables[i];
-                m_log.DebugFormat("[XXX]: Getting item {0} from avie {1}", wearable[0].ItemID, source);
-                if (wearable[0].ItemID != UUID.Zero)
+                basewearable = wearables[i];
+                if(basewearable == null || basewearable.Count == 0)
+                    continue;
+
+                newbasewearable.Clear();
+                for(int j = 0; j < basewearable.Count; j++)
                 {
-                    // Get inventory item and copy it
-                    InventoryItemBase item = m_InventoryService.GetItem(source, wearable[0].ItemID);
-
-                    if (item != null)
+                    wearable = basewearable[j];
+                    if (wearable.ItemID != UUID.Zero)
                     {
-                        InventoryItemBase destinationItem = new InventoryItemBase(UUID.Random(), destination);
-                        destinationItem.Name = item.Name;
-                        destinationItem.Owner = destination;
-                        destinationItem.Description = item.Description;
-                        destinationItem.InvType = item.InvType;
-                        destinationItem.CreatorId = item.CreatorId;
-                        destinationItem.CreatorData = item.CreatorData;
-                        destinationItem.NextPermissions = item.NextPermissions;
-                        destinationItem.CurrentPermissions = item.CurrentPermissions;
-                        destinationItem.BasePermissions = item.BasePermissions;
-                        destinationItem.EveryOnePermissions = item.EveryOnePermissions;
-                        destinationItem.GroupPermissions = item.GroupPermissions;
-                        destinationItem.AssetType = item.AssetType;
-                        destinationItem.AssetID = item.AssetID;
-                        destinationItem.GroupID = item.GroupID;
-                        destinationItem.GroupOwned = item.GroupOwned;
-                        destinationItem.SalePrice = item.SalePrice;
-                        destinationItem.SaleType = item.SaleType;
-                        destinationItem.Flags = item.Flags;
-                        destinationItem.CreationDate = item.CreationDate;
-                        destinationItem.Folder = destinationFolder.ID;
-                        ApplyNextOwnerPermissions(destinationItem);
+                        m_log.DebugFormat("[XXX]: Getting item {0} from avie {1} for {2} {3}",
+                            wearable.ItemID, source, i, j);
+                        // Get inventory item and copy it
+                        InventoryItemBase item = m_InventoryService.GetItem(source, wearable.ItemID);
 
-                        m_InventoryService.AddItem(destinationItem);
-                        m_log.DebugFormat("[USER ACCOUNT SERVICE]: Added item {0} to folder {1}", destinationItem.ID, destinationFolder.ID);
+                        if(item != null && item.AssetType == (int)AssetType.Link)
+                        {
+                            if(item.AssetID == UUID.Zero )
+                                item = null;
+                            else
+                              item = m_InventoryService.GetItem(source, item.AssetID);
+                        }
 
-                        // Wear item
-                        AvatarWearable newWearable = new AvatarWearable();
-                        newWearable.Wear(destinationItem.ID, wearable[0].AssetID);
-                        avatarAppearance.SetWearable(i, newWearable);
+                        if (item != null)
+                        {
+                            InventoryItemBase destinationItem = new InventoryItemBase(UUID.Random(), destination);
+                            destinationItem.Name = item.Name;
+                            destinationItem.Owner = destination;
+                            destinationItem.Description = item.Description;
+                            destinationItem.InvType = item.InvType;
+                            destinationItem.CreatorId = item.CreatorId;
+                            destinationItem.CreatorData = item.CreatorData;
+                            destinationItem.NextPermissions = item.NextPermissions;
+                            destinationItem.CurrentPermissions = item.CurrentPermissions;
+                            destinationItem.BasePermissions = item.BasePermissions;
+                            destinationItem.EveryOnePermissions = item.EveryOnePermissions;
+                            destinationItem.GroupPermissions = item.GroupPermissions;
+                            destinationItem.AssetType = item.AssetType;
+                            destinationItem.AssetID = item.AssetID;
+                            destinationItem.GroupID = item.GroupID;
+                            destinationItem.GroupOwned = item.GroupOwned;
+                            destinationItem.SalePrice = item.SalePrice;
+                            destinationItem.SaleType = item.SaleType;
+                            destinationItem.Flags = item.Flags;
+                            destinationItem.CreationDate = item.CreationDate;
+                            destinationItem.Folder = destinationFolder.ID;
+                            ApplyNextOwnerPermissions(destinationItem);
 
-                        // Add to Current Outfit
-                        CreateCurrentOutfitLink((int)InventoryType.Wearable, item.Flags, item.Name, destinationItem.ID, destination, currentOutfitFolder.ID);
-                    }
-                    else
-                    {
-                        m_log.WarnFormat("[USER ACCOUNT SERVICE]: Error transferring {0} to folder {1}", wearable[0].ItemID, destinationFolder.ID);
+                            m_InventoryService.AddItem(destinationItem);
+                            m_log.DebugFormat("[USER ACCOUNT SERVICE]: Added item {0} to folder {1}", destinationItem.ID, destinationFolder.ID);
+
+                            // Wear item
+                            newbasewearable.Add(destinationItem.ID,wearable.AssetID);
+
+                            // Add to Current Outfit
+                            CreateCurrentOutfitLink((int)InventoryType.Wearable, item.Flags, item.Name, destinationItem.ID, destination, currentOutfitFolder.ID);
+                        }
+                        else
+                        {
+                            m_log.WarnFormat("[USER ACCOUNT SERVICE]: Error transferring {0} to folder {1}", wearable.ItemID, destinationFolder.ID);
+                        }
                     }
                 }
+                avatarAppearance.SetWearable(i, newbasewearable);
             }
 
             // Attachments
             List<AvatarAttachment> attachments = avatarAppearance.GetAttachments();
+            avatarAppearance.ClearAttachments();
 
             foreach (AvatarAttachment attachment in attachments)
             {

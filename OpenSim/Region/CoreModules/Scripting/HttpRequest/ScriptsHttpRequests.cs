@@ -110,7 +110,7 @@ namespace OpenSim.Region.CoreModules.Scripting.HttpRequest
 
         public HttpRequestModule()
         {
-            ServicePointManager.ServerCertificateValidationCallback +=ValidateServerCertificate;
+//            ServicePointManager.ServerCertificateValidationCallback +=ValidateServerCertificate;
         }
 
         public static bool ValidateServerCertificate(
@@ -666,7 +666,8 @@ namespace OpenSim.Region.CoreModules.Scripting.HttpRequest
                     ResponseBody = e.Message;
                 }
             }
-            catch (Exception e)
+//            catch (Exception e)
+            catch
             {
                 // Don't crash on anything else
             }

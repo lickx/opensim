@@ -30,6 +30,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -92,6 +94,7 @@ namespace OpenSim.Framework
         // explicitly given
         All = 0x8e000,
         AllAndExport = 0x9e000,
+        AllAndExportNoMod = 0x9a000,
         AllEffective = 0x9e000,
         UnfoldedMask = 0x1e000
     }
@@ -261,10 +264,7 @@ namespace OpenSim.Framework
         /// <returns>The distance between the two vectors</returns>
         public static double GetDistanceTo(Vector3 a, Vector3 b)
         {
-            float dx = a.X - b.X;
-            float dy = a.Y - b.Y;
-            float dz = a.Z - b.Z;
-            return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            return Vector3.Distance(a,b);
         }
 
         /// <summary>
@@ -276,10 +276,7 @@ namespace OpenSim.Framework
         /// <returns></returns>
         public static bool DistanceLessThan(Vector3 a, Vector3 b, double amount)
         {
-            float dx = a.X - b.X;
-            float dy = a.Y - b.Y;
-            float dz = a.Z - b.Z;
-            return (dx*dx + dy*dy + dz*dz) < (amount*amount);
+            return Vector3.DistanceSquared(a,b) < (amount * amount);
         }
 
         /// <summary>
@@ -380,15 +377,17 @@ namespace OpenSim.Framework
             get { return randomClass; }
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static ulong UIntsToLong(uint X, uint Y)
         {
-            return Utils.UIntsToLong(X, Y);
+            return ((ulong)X << 32) | (ulong)Y;
         }
 
         // Regions are identified with a 'handle' made up of its world coordinates packed into a ulong.
         // Region handles are based on the coordinate of the region corner with lower X and Y
         // var regions need more work than this to get that right corner from a generic world position
         // this corner must be on a grid point
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static ulong RegionWorldLocToHandle(uint X, uint Y)
         {
            ulong handle = X & 0xffffff00; // make sure it matchs grid coord points.
@@ -397,6 +396,7 @@ namespace OpenSim.Framework
            return handle;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static ulong RegionGridLocToHandle(uint X, uint Y)
         {
             ulong handle = X;
@@ -405,12 +405,14 @@ namespace OpenSim.Framework
             return handle;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static void RegionHandleToWorldLoc(ulong handle, out uint X, out uint Y)
         {
             X = (uint)(handle >> 32);
             Y = (uint)(handle & 0xfffffffful);
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static void RegionHandleToRegionLoc(ulong handle, out uint X, out uint Y)
         {
             X = (uint)(handle >> 40) & 0x00ffffffu; //  bring from higher half, divide by 256 and clean
@@ -420,12 +422,14 @@ namespace OpenSim.Framework
 
         // A region location can be 'world coordinates' (meters) or 'region grid coordinates'
         // grid coordinates have a fixed step of 256m as defined by viewers
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static uint WorldToRegionLoc(uint worldCoord)
         {
             return worldCoord >> 8;
         }
 
         // Convert a region's 'region grid coordinate' to its 'world coordinate'.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static uint RegionToWorldLoc(uint regionCoord)
         {
             return regionCoord << 8;
@@ -575,14 +579,15 @@ namespace OpenSim.Framework
         }
 
         // Clamp the maximum magnitude of a vector
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static Vector3 ClampV(Vector3 x, float max)
         {
             float lenSq = x.LengthSquared();
             if (lenSq > (max * max))
             {
-                x = x / x.Length() * max;
+                lenSq = max / (float)Math.Sqrt(lenSq);
+                x = x * lenSq;
             }
-
             return x;
         }
 
@@ -671,7 +676,7 @@ namespace OpenSim.Framework
         public static string GetFormattedXml(string rawXml)
         {
             XmlDocument xd = new XmlDocument();
-            xd.XmlResolver=null;
+
             xd.LoadXml(rawXml);
 
             StringBuilder sb = new StringBuilder();
@@ -825,8 +830,8 @@ namespace OpenSim.Framework
 
         private static byte[] ComputeMD5Hash(string data, Encoding encoding)
         {
-            MD5 md5 = MD5.Create();
-            return md5.ComputeHash(encoding.GetBytes(data));
+            using(MD5 md5 = MD5.Create())
+                return md5.ComputeHash(encoding.GetBytes(data));
         }
 
         /// <summary>
@@ -1914,7 +1919,9 @@ namespace OpenSim.Framework
             string ru = String.Empty;
 
             if (Environment.OSVersion.Platform == PlatformID.Unix)
-                ru = "Unix/Mono";
+            {
+               ru = "Unix/Mono";
+            }
             else
                 if (Environment.OSVersion.Platform == PlatformID.MacOSX)
                     ru = "OSX/Mono";
@@ -2675,7 +2682,7 @@ namespace OpenSim.Framework
 
                         callback(o);
                     }
-                    catch (ThreadAbortException e)
+                    catch (ThreadAbortException)
                     {
                     }
                     catch (Exception e)
@@ -2858,6 +2865,12 @@ namespace OpenSim.Framework
         /// <returns>The stack trace, or null if failed to get it</returns>
         private static StackTrace GetStackTrace(Thread targetThread)
         {
+
+            return null;
+/*
+        not only this does not work on mono but it is not longer recomended on windows.
+        can cause deadlocks etc.
+
             if (IsPlatformMono)
             {
                 // This doesn't work in Mono
@@ -2920,6 +2933,7 @@ namespace OpenSim.Framework
                 // Signal the fallack-thread to stop
                 exitedSafely.Set();
             }
+*/
         }
 #pragma warning restore 0618
 
@@ -3017,16 +3031,36 @@ namespace OpenSim.Framework
             return tcA - tcB;
         }
 
-        // returns a timestamp in ms as double
-        // using the time resolution avaiable to StopWatch
-        public static double GetTimeStamp()
+        public static long GetPhysicalMemUse()
         {
-            return (double)Stopwatch.GetTimestamp() * TimeStampClockPeriod;
+            return System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
         }
 
+        // returns a timestamp in ms as double
+        // using the time resolution avaiable to StopWatch
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]  
+        public static double GetTimeStamp()
+        {
+            return Stopwatch.GetTimestamp() * TimeStampClockPeriod;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public static double GetTimeStampMS()
         {
-            return (double)Stopwatch.GetTimestamp() * TimeStampClockPeriodMS;
+            return Stopwatch.GetTimestamp() * TimeStampClockPeriodMS;
+        }
+
+        // doing math in ticks is usefull to avoid loss of resolution
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static long GetTimeStampTicks()
+        {
+            return Stopwatch.GetTimestamp();
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static double TimeStampTicksToMS(long ticks)
+        {
+            return ticks * TimeStampClockPeriodMS;
         }
 
         /// <summary>
@@ -3410,6 +3444,34 @@ namespace OpenSim.Framework
             m_log.ErrorFormat("{0} Failed XML ({1} bytes) = {2}", message, length, xml);
         }
 
+        /// <summary>
+        /// Performs a high quality image resize
+        /// </summary>
+        /// <param name="image">Image to resize</param>
+        /// <param name="width">New width</param>
+        /// <param name="height">New height</param>
+        /// <returns>Resized image</returns>
+        public static Bitmap ResizeImageSolid(Image image, int width, int height)
+        {
+            Bitmap result = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+
+            using (ImageAttributes atrib = new ImageAttributes())
+            using (Graphics graphics = Graphics.FromImage(result))
+            {
+                atrib.SetWrapMode(System.Drawing.Drawing2D.WrapMode.TileFlipXY);
+                atrib.SetWrapMode(System.Drawing.Drawing2D.WrapMode.TileFlipXY);
+                graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.None;
+
+                graphics.DrawImage(image,new Rectangle(0,0, result.Width, result.Height),
+                    0, 0, image.Width, image.Height, GraphicsUnit.Pixel, atrib);
+            }
+
+            return result;
+        }
+
     }
 
 /*  don't like this code
@@ -3574,5 +3636,6 @@ namespace OpenSim.Framework
         {
             rng.GetBytes(buff);
         }
+
     }
 }
