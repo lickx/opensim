@@ -64,6 +64,8 @@ namespace OpenSim.Region.CoreModules.World.Estate
         /// If false, region restart requests from the client are blocked even if they are otherwise legitimate.
         /// </summary>
         public bool AllowRegionRestartFromClient { get; set; }
+        private bool m_ignoreEstateMinorAccessControl;
+        private bool m_ignoreEstatePaymentAccessControl;
 
         private EstateTerrainXferHandler TerrainUploader;
         public TelehubManager m_Telehub;
@@ -89,7 +91,11 @@ namespace OpenSim.Region.CoreModules.World.Estate
             IConfig config = source.Configs["EstateManagement"];
 
             if (config != null)
+            {
                 AllowRegionRestartFromClient = config.GetBoolean("AllowRegionRestartFromClient", true);
+                m_ignoreEstateMinorAccessControl = config.GetBoolean("IgnoreEstateMinorAccessControl", false);
+                m_ignoreEstatePaymentAccessControl = config.GetBoolean("IgnoreEstatePaymentAccessControl", false);
+            }
         }
 
         public void AddRegion(Scene scene)
@@ -118,6 +124,9 @@ namespace OpenSim.Region.CoreModules.World.Estate
             scene.TriggerEstateSunUpdate();
 
             UserManager = scene.RequestModuleInterface<IUserManagement>();
+
+            scene.RegionInfo.EstateSettings.DoDenyMinors = !m_ignoreEstateMinorAccessControl;
+            scene.RegionInfo.EstateSettings.DoDenyAnonymous = !m_ignoreEstateMinorAccessControl;
         }
 
         public void Close()
