@@ -311,7 +311,7 @@ namespace OpenSim
             configSource.AddSwitch("Startup", "crash_dir");
             configSource.AddSwitch("Startup", "PIDFile");
             configSource.AddSwitch("Startup", "regionload_regionfile");
-            configSource.AddSwitch("Startup", "regionload_regiondir");
+            configSource.AddSwitch("Startup", "regionload_regionsdir");
 
             configSource.AddConfig("StandAlone");
             configSource.AddConfig("Network");
