@@ -83,5 +83,84 @@
     <Key Name="assetType" Value="20" />
     <Key Name="fileName" Value="handshake_01.dat"/>
   </Section>
+
+  <!-- Animations for viewer posestand floaters; UUIDs grabbed from Firestorm app_settings/posestand.xml -->
+  <Section Name="PS_T_Pose">
+    <Key Name="assetID" Value="febde518-eba6-1628-9070-a2c227852324"/>
+    <Key Name="name" Value="PS_T_Pose"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_t-pose.dat"/>
+  </Section>
+  <Section Name="PS_Arms_Down_Legs_together">
+    <Key Name="assetID" Value="8c607ae7-80a9-0004-5186-4e2bedafb256"/>
+    <Key Name="name" Value="PS_Arms_Down_Legs_together"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_down_legs_together.dat"/>
+  </Section>
+  <Section Name="PS_Arms_down_sitting">
+    <Key Name="assetID" Value="7ec0f76c-88ac-b9f2-778f-8fd95a30c7fc"/>
+    <Key Name="name" Value="PS_Arms_down_sitting"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_down_sitting.dat"/>
+  </Section>
+  <Section Name="PS_Arms_downward_Legs_apart">
+    <Key Name="assetID" Value="a0f213b6-5506-3cf8-32ac-cfc9684048e7"/>
+    <Key Name="name" Value="PS_Arms_downward_Legs_apart"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_downward_legs_apart.dat"/>
+  </Section>
+  <Section Name="PS_Arms_downward_Legs_together">
+    <Key Name="assetID" Value="9e95943d-8020-e622-a4e0-4c9f8058091a"/>
+    <Key Name="name" Value="PS_Arms_downward_Legs_together"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_downward_legs_together.dat"/>
+  </Section>
+  <Section Name="PS_Arms_forward_Legs_apart">
+    <Key Name="assetID" Value="6c5e15de-7079-f558-d635-7123b7379dec"/>
+    <Key Name="name" Value="PS_Arms_forward_Legs_apart"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_forward_legs_apart.dat"/>
+  </Section>
+  <Section Name="PS_Arms_forward_Legs_together">
+    <Key Name="assetID" Value="58401663-f5d3-828c-6cb5-ff618308e6be"/>
+    <Key Name="name" Value="PS_Arms_forward_Legs_together"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_forward_legs_together.dat"/>
+  </Section>
+  <Section Name="PS_Arms_straight_Legs_apart">
+    <Key Name="assetID" Value="7598be4b-6b1d-afaf-bc5e-0708fa3c214a"/>
+    <Key Name="name" Value="PS_Arms_straight_Legs_apart"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_straight_legs_apart.dat"/>
+  </Section>
+  <Section Name="PS_Arms_straight_sitting">
+    <Key Name="assetID" Value="5acb15c0-1b14-6276-bd52-afdaad13cc1d"/>
+    <Key Name="name" Value="PS_Arms_straight_sitting"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_straight_sitting.dat"/>
+  </Section>
+  <Section Name="PS_Arms_upward_Legs_apart">
+    <Key Name="assetID" Value="b28ee0ca-81b3-82f0-c3a3-5308efacf774"/>
+    <Key Name="name" Value="PS_Arms_upward_Legs_apart"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_upward_legs_apart.dat"/>
+  </Section>
+  <Section Name="PS_Arms_upward_Legs_together">
+    <Key Name="assetID" Value="e2f67928-18ab-3991-4612-658cd88a1b4f"/>
+    <Key Name="name" Value="PS_Arms_upward_Legs_together"/>
+    <Key Name="description" Value=""/>
+    <Key Name="assetType" Value="20" />
+    <Key Name="fileName" Value="ps_arms_upward_legs_together.dat"/>
+  </Section>
   
 </Nini>
