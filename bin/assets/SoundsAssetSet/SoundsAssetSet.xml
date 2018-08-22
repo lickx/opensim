@@ -161,4 +161,13 @@
     <Key Name="assetType" Value="1" />
     <Key Name="fileName" Value="OSSndWindowOpen.ogg" />
   </Section>
+
+  <!-- Used by Firestorm keyword chat alert, user younger than x days alert etc -->
+  <Section Name="FSAlert">
+    <Key Name="assetID" Value="a3f48b85-c29f-1f97-ebb6-644b7c053512" />
+    <Key Name="name" Value="FSAlert" />
+    <Key Name="assetType" Value="1" />
+    <Key Name="fileName" Value="FSAlert.ogg" />
+  </Section>
+
 </Nini>
