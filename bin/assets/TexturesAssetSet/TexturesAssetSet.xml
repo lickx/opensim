@@ -800,7 +800,7 @@
      <Key Name="assetID" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d"/>
      <Key Name="name" Value="Smoke"/>
      <Key Name="assetType" Value="0" />
-     <Key Name="fileName" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d.jp2"/>
+     <Key Name="fileName" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d.j2c"/>
   </Section>
 
   <!-- This is the texture used for stars, as well as the default particle texture -->
