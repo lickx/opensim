@@ -1535,6 +1535,7 @@ namespace OpenSim.Region.Framework.Scenes
 */
         public int GetStateSource()
         {
+/*
             AgentCircuitData aCircuit = m_scene.AuthenticateHandler.GetAgentCircuitData(UUID);
 
             if (aCircuit != null && (aCircuit.teleportFlags != (uint)TeleportFlags.Default))
@@ -1545,6 +1546,8 @@ namespace OpenSim.Region.Framework.Scenes
                 return 5; // StateSource.Teleporting
             }
             return 2; // StateSource.PrimCrossing
+*/
+            return m_teleportFlags == TeleportFlags.Default ? 2 : 5;
         }
 
         /// <summary>
