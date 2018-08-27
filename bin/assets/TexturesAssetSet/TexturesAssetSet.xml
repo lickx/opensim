@@ -795,19 +795,12 @@
     <Key Name="fileName" Value="3c59f7fe-9dc8-47f9-8aaf-a9dd1fbc3bef.j2c" />
   </Section>
   
+  <!-- This is what makes translucent objects light up in red with CTRL-ALT-T in the viewer: -->
   <Section Name="Smoke">
      <Key Name="assetID" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d"/>
      <Key Name="name" Value="Smoke"/>
      <Key Name="assetType" Value="0" />
      <Key Name="fileName" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d.jp2"/>
-  </Section>
-
-  <!-- This is what makes translucent objects light up in red with CTRL-ALT-T in the viewer: -->
-  <Section Name="IMG_SMOKE">
-     <Key Name="assetID" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d"/>
-     <Key Name="name" Value="Smoke"/>
-     <Key Name="assetType" Value="0" />
-     <Key Name="fileName" Value="b4ba225c-373f-446d-9f7e-6cb7b5cf9b3d.j2c" />
   </Section>
 
   <!-- This is the texture used for stars, as well as the default particle texture -->
