@@ -294,18 +294,14 @@ namespace OpenSim.Services.HypergridService
         public override InventoryItemBase GetItem(UUID principalID, UUID itemID)
         {
             InventoryItemBase it = base.GetItem(principalID, itemID);
-
-// This was commented out in the HGSuitcaseInventoryService, so lets do the same here!
-/*
             if (it != null)
             {
                 UserAccount user = m_Cache.GetUser(it.CreatorId);
 
                 // Adjust the creator data
-                if (user != null && string.IsNullOrEmpty(it.CreatorData))
+                if (user != null && it != null && string.IsNullOrEmpty(it.CreatorData))
                     it.CreatorData = m_HomeURL + ";" + user.FirstName + " " + user.LastName;
             }
-*/
             return it;
         }
 

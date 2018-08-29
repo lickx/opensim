@@ -55,11 +55,6 @@ namespace OpenSim.Region.Framework.Interfaces
         Object AttachmentsSyncLock { get; }
 
         /// <summary>
-        /// The AvatarFactoryModule synchronizes on this to avoid race conditions when altering appearances.
-        /// </summary>
-        Object AppearanceSyncLock { get; }
-
-        /// <summary>
         /// The scene objects attached to this avatar.
         /// </summary>
         /// <returns>

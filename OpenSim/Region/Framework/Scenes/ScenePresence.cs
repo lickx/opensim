@@ -272,7 +272,6 @@ namespace OpenSim.Region.Framework.Scenes
         private List<SceneObjectGroup> m_attachments = new List<SceneObjectGroup>();
 
         public Object AttachmentsSyncLock { get; private set; }
-        public Object AppearanceSyncLock { get; private set; }
 
         private Dictionary<UUID, ScriptControllers> scriptedcontrols = new Dictionary<UUID, ScriptControllers>();
         private ScriptControlled IgnoredControls = ScriptControlled.CONTROL_ZERO;
@@ -1055,7 +1054,6 @@ namespace OpenSim.Region.Framework.Scenes
         {
             m_scene = world;
             AttachmentsSyncLock = new Object();
-            AppearanceSyncLock = new Object();
             AllowMovement = true;
             IsChildAgent = true;
             IsLoggingIn = false;
