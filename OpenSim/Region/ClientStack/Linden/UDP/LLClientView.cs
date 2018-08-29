@@ -914,7 +914,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             reply.ChatData.OwnerID = ownerID;
             reply.ChatData.SourceID = fromAgentID;
 
-            OutPacket(reply, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
+            OutPacket(reply, ThrottleOutPacketType.Unknown);
         }
 
         /// <summary>
@@ -1806,11 +1806,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             //
             // for one example of this kind of thing.  In fact, the Linden servers appear to only send about
             // 6 to 7 items at a time, so let's stick with 6
-            //
-            // Ok lets read that last sentence again... Linden servers "appear" to only send 6-7 items,
-            // so lets stick to 6?? Why not 7 ... and WHY was max items set to 5 then??
-            int MAX_ITEMS_PER_PACKET = 7; // 5;
-            int MAX_FOLDERS_PER_PACKET = 7; // 6;
+            int MAX_ITEMS_PER_PACKET = 5;
+            int MAX_FOLDERS_PER_PACKET = 6;
 
             int totalItems = fetchItems ? items.Count : 0;
             int totalFolders = fetchFolders ? folders.Count : 0;
@@ -1827,7 +1824,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 currentPacket = CreateInventoryDescendentsPacket(ownerID, folderID, version, items.Count + folders.Count, 0, 0);
 
             // To preserve SL compatibility, we will NOT combine folders and items in one packet
-            // F that!
+            //
             while (itemsSent < totalItems || foldersSent < totalFolders)
             {
                 if (currentPacket == null) // Start a new packet
@@ -1854,7 +1851,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 {
 //                    m_log.DebugFormat(
 //                        "[LLCLIENTVIEW]: Sending inventory folder details packet to {0} for folder {1}", Name, folderID);
-                    OutPacket(currentPacket, ThrottleOutPacketType.Unknown, false);
+                    OutPacket(currentPacket, ThrottleOutPacketType.Asset, false);
                     currentPacket = null;
                 }
             }
@@ -1863,7 +1860,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             {
 //                m_log.DebugFormat(
 //                    "[LLCLIENTVIEW]: Sending inventory folder details packet to {0} for folder {1}", Name, folderID);
-                OutPacket(currentPacket, ThrottleOutPacketType.Unknown, false);
+                OutPacket(currentPacket, ThrottleOutPacketType.Asset, false);
             }
         }
 
@@ -7142,6 +7139,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                             CacheId = appear.WearableData[i].CacheID,
                             TextureIndex=Convert.ToUInt32(appear.WearableData[i].TextureIndex)
                         };
+
+
 
                     handlerSetAppearance(sender, te, visualparams,avSize, cacheitems);
                 }

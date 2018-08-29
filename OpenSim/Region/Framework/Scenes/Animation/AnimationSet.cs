@@ -206,33 +206,6 @@ namespace OpenSim.Region.Framework.Scenes.Animation
             }
         }
 
-        // Used by ScenePresenceAnimator.GetAnimationArray() which previously
-        // used GetArrays() when only the animIDs array was needed.
-        // This is slightly faster.
-        public UUID[] GetAnimIDsArray()
-        {
-            UUID[] animIDs;
-            lock (m_animations)
-            {
-                int defaultSize = 0;
-                if (m_defaultAnimation.AnimID != UUID.Zero)
-                    defaultSize++;
-
-                animIDs = new UUID[m_animations.Count + defaultSize];
-
-                if (m_defaultAnimation.AnimID != UUID.Zero)
-                {
-                    animIDs[0] = m_defaultAnimation.AnimID;
-                }
-
-                for (int i = 0; i < m_animations.Count; ++i)
-                {
-                    animIDs[i + defaultSize] = m_animations[i].AnimID;
-                }
-            }
-            return animIDs;
-        }
-
         public OpenSim.Framework.Animation[] ToArray()
         {
             OpenSim.Framework.Animation[] theArray = new OpenSim.Framework.Animation[m_animations.Count];
