@@ -61,6 +61,10 @@ namespace OpenSim.Region.ScriptEngine.Yengine
 
         protected override void ScriptSleep(int ms)
         {
+            ms = (int)(ms * m_ScriptDelayFactor);
+            if (ms < 10)
+                return;
+
             inst.Sleep(ms);
         }
 

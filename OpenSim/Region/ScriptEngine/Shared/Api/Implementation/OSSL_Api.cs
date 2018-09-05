@@ -485,10 +485,13 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
         protected void ScriptSleep(int delay)
         {
-            delay = (int)((float)delay * m_ScriptDelayFactor);
-            if (delay == 0)
+            delay = (int)(delay * m_ScriptDelayFactor);
+            if (delay < 10)
                 return;
-            System.Threading.Thread.Sleep(delay);
+            if(m_item != null)
+                m_ScriptEngine.SleepScript(m_item.ItemID, delay);
+            else
+                Thread.Sleep(delay);
         }
 
         public LSL_Integer osSetTerrainHeight(int x, int y, double val)
@@ -628,16 +631,41 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
         public void osRegionNotice(string msg)
         {
-            // This implementation provides absolutely no security
-            // It's high griefing potential makes this classification
-            // necessary
-            //
-            CheckThreatLevel(ThreatLevel.VeryHigh, "osRegionNotice");
+            CheckThreatLevel(ThreatLevel.High, "osRegionNotice");
 
             IDialogModule dm = World.RequestModuleInterface<IDialogModule>();
+            if (dm == null)
+                return;
 
-            if (dm != null)
-                dm.SendGeneralAlert(msg);
+            if (!World.Permissions.CanIssueEstateCommand(m_host.OwnerID, false))
+                return;
+
+            dm.SendGeneralAlert(msg + "\n");
+        }
+
+        public void osRegionNotice(LSL_Key agentID, string msg)
+        {
+            CheckThreatLevel(ThreatLevel.High, "osRegionNotice");
+
+            if (!World.Permissions.CanIssueEstateCommand(m_host.OwnerID, false))
+                return;
+
+            IDialogModule dm = World.RequestModuleInterface<IDialogModule>();
+            if (dm == null)
+                return;
+
+            UUID avatarID;
+            if (!UUID.TryParse(agentID, out avatarID))
+                return;
+
+            ScenePresence sp = null;
+            if (!World.TryGetScenePresence(avatarID, out sp))
+                return;
+
+            if (sp == null || sp.IsChildAgent || sp.IsDeleted || sp.IsInTransit || sp.IsNPC)
+                return;
+
+            dm.SendAlertToUser(sp.ControllingClient, msg + "\n", false);
         }
 
         public void osSetRot(UUID target, Quaternion rotation)
