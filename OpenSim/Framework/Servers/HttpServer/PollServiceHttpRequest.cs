@@ -96,13 +96,19 @@ namespace OpenSim.Framework.Servers.HttpServer
             try
             {
                 response.OutputStream.Write(buffer, 0, buffer.Length);
-                response.OutputStream.Flush();
                 response.Send();
                 buffer = null;
             }
             catch (Exception ex)
             {
-                m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
+                if(ex is System.Net.Sockets.SocketException)
+                {
+                    // only mute connection reset by peer so we are not totally blind for now
+                    if(((System.Net.Sockets.SocketException)ex).SocketErrorCode != System.Net.Sockets.SocketError.ConnectionReset)
+                         m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
+                }
+                else
+                    m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
             }
 
             PollServiceArgs.RequestsHandled++;
@@ -116,7 +122,6 @@ namespace OpenSim.Framework.Servers.HttpServer
             if(Request.Body.CanRead)
                 Request.Body.Dispose();
 
-            response.SendChunked = false;
             response.ContentLength64 = 0;
             response.ContentEncoding = Encoding.UTF8;
             response.KeepAlive = false;
@@ -125,7 +130,6 @@ namespace OpenSim.Framework.Servers.HttpServer
 
             try
             {
-                response.OutputStream.Flush();
                 response.Send();
             }
             catch
