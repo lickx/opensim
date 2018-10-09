@@ -1,4 +1,5 @@
-/*
+/* 1 april 2018
+ * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
@@ -66,6 +67,8 @@ namespace OpenSim.Capabilities.Handlers
             Hashtable ret = new Hashtable();
             ret["int_response_code"] = (int)System.Net.HttpStatusCode.NotFound;
             ret["content_type"] = "text/plain";
+            ret["keepalive"] = false; // Seems to always be false
+            ret["reusecontext"] = false; // Seems to always be false
             ret["int_bytes"] = 0;
             string textureStr = (string)request["texture_id"];
             string format = (string)request["format"];
@@ -97,21 +100,19 @@ namespace OpenSim.Capabilities.Handlers
 
                 }
                 // OK, we have an array with preferred formats, possibly with only one entry
-                bool foundtexture = false;
                 foreach (string f in formats)
                 {
-                    foundtexture = FetchTexture(request, ret, textureID, f);
-                    if (foundtexture)
-                        break;
+                    if (FetchTexture(request, ret, textureID, f))
+                        return ret; // Got it! Done
                 }
-                if (!foundtexture)
-                {
-                    ret["int_response_code"] = 404;
-                    ret["error_status_text"] = "not found";
-                    ret["str_response_string"] = "not found";
-                    ret["content_type"] = "text/plain";
-                    ret["int_bytes"] = 0;
-                }
+                // If we arrived here then we did not find the texture
+                ret["int_response_code"] = 404;
+                ret["error_status_text"] = "not found";
+                ret["str_response_string"] = "not found";
+                //ret["content_type"] = "text/plain";
+                //ret["keepalive"] = false;
+                //ret["reusecontext"] = false;
+                //ret["int_bytes"] = 0;
             }
             else
             {
@@ -134,21 +135,24 @@ namespace OpenSim.Capabilities.Handlers
         /// <returns>False for "caller try another codec"; true otherwise</returns>
         private bool FetchTexture(Hashtable request, Hashtable response, UUID textureID, string format)
         {
-//            m_log.DebugFormat("[GETTEXTURE]: {0} with requested format {1}", textureID, format);
-            AssetBase texture;
-
-            string fullID = textureID.ToString();
+            //            m_log.DebugFormat("[GETTEXTURE]: {0} with requested format {1}", textureID, format);
+            AssetBase texture = null;
+            
             if (format != DefaultFormat)
-                fullID = fullID + "-" + format;
+            {
+                string fullID = textureID.ToString() + "-" + format;
 
-            // try the cache
-            texture = m_assetService.GetCached(fullID);
+                // Try the cache for the non default format. 
+                // Get() will also try the cache. So no need doing it 2x for default format.
+                texture = m_assetService.GetCached(fullID);
+            }
 
             if (texture == null)
             {
                 //m_log.DebugFormat("[GETTEXTURE]: texture was not in the cache");
 
                 // Fetch locally or remotely. Misses return a 404
+                // Get() will also check the local cache.
                 texture = m_assetService.Get(textureID.ToString());
 
                 if (texture != null)
@@ -177,7 +181,7 @@ namespace OpenSim.Capabilities.Handlers
                     }
                 }
            }
-           else // it was on the cache
+           else // it was in the cache
            {
                //m_log.DebugFormat("[GETTEXTURE]: texture was in the cache");
                WriteTextureData(request, response, texture, format);
@@ -349,8 +353,6 @@ namespace OpenSim.Capabilities.Handlers
             m_log.DebugFormat("[GETTEXTURE]: Converting texture {0} to {1}", texture.ID, format);
             byte[] data = new byte[0];
 
-            MemoryStream imgstream = new MemoryStream();
-            Bitmap mTexture = null;
             ManagedImage managedImage = null;
             Image image = null;
 
@@ -362,22 +364,26 @@ namespace OpenSim.Capabilities.Handlers
                 if (OpenJPEG.DecodeToImage(texture.Data, out managedImage, out image) && image != null)
                 {
                     // Save to bitmap
-                    mTexture = new Bitmap(image);
-
-                    using(EncoderParameters myEncoderParameters = new EncoderParameters())
+                    using (Bitmap mTexture = new Bitmap(image))
                     {
-                        myEncoderParameters.Param[0] = new EncoderParameter(Encoder.Quality,95L);
-
-                        // Save bitmap to stream
-                        ImageCodecInfo codec = GetEncoderInfo("image/" + format);
-                        if (codec != null)
+                        using (EncoderParameters myEncoderParameters = new EncoderParameters())
                         {
-                            mTexture.Save(imgstream, codec, myEncoderParameters);
-                        // Write the stream to a byte array for output
-                            data = imgstream.ToArray();
+                            myEncoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, 95L);
+
+                            // Save bitmap to stream
+                            ImageCodecInfo codec = GetEncoderInfo("image/" + format);
+                            if (codec != null)
+                            {
+                                using (MemoryStream imgstream = new MemoryStream())
+                                {
+                                    mTexture.Save(imgstream, codec, myEncoderParameters);
+                                    // Write the stream to a byte array for output
+                                    data = imgstream.ToArray();
+                                }
+                            }
+                            else
+                                m_log.WarnFormat("[GETTEXTURE]: No such codec {0}", format);
                         }
-                        else
-                            m_log.WarnFormat("[GETTEXTURE]: No such codec {0}", format);
                     }
                 }
             }
@@ -389,16 +395,15 @@ namespace OpenSim.Capabilities.Handlers
             {
                 // Reclaim memory, these are unmanaged resources
                 // If we encountered an exception, one or more of these will be null
-                if (mTexture != null)
-                    mTexture.Dispose();
+                try
+                {
+                    if (image != null)
+                        image.Dispose();
 
-                if (image != null)
-                    image.Dispose();
-
-                if(managedImage != null)
-                    managedImage.Clear();
-                if (imgstream != null)
-                    imgstream.Dispose();
+                    if (managedImage != null)
+                        managedImage.Clear();
+                }
+                catch { }
             }
 
             return data;

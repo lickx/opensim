@@ -1,4 +1,4 @@
-/* 11 feb 2018
+/* 30 August 2018
  * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
@@ -29,7 +29,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using System.Reflection;
 using System.Threading;
 using log4net;
@@ -52,14 +51,14 @@ namespace OpenSim.Region.ClientStack.Linden
     [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "GetTextureModule")]
     public class GetTextureModule : INonSharedRegionModule
     {
-        struct APollRequest
+        struct aPollRequest
         {
             public PollServiceTextureEventArgs thepoll;
             public UUID reqID;
             public Hashtable request;
         }
 
-        public class APollResponse
+        public class aPollResponse
         {
             public Hashtable response;
             public int bytes;
@@ -69,16 +68,18 @@ namespace OpenSim.Region.ClientStack.Linden
 
         private Scene m_scene;
 
-        private IAssetService m_assetService = null;
-
+        private static IAssetService m_assetService = null;
         
         private Dictionary<UUID, string> m_capsDict = new Dictionary<UUID, string>();
         private static int m_NumberScenes = 0;
 
-        private static readonly Queue<APollRequest> m_queue = new Queue<APollRequest>();
-        private static readonly ManualResetEvent m_signal = new ManualResetEvent(true);
-        private static readonly object m_queueSync = new object();
+        private static Queue<aPollRequest> m_queue = new Queue<aPollRequest>();
+        private static ManualResetEvent m_signal = new ManualResetEvent(true);
+
+        private static object m_queueSync = new object();
         private static volatile bool m_running = true;
+
+        private static System.Threading.Timer[] m_queueTimer = new System.Threading.Timer[4] { null, null, null, null };
 
         private Dictionary<UUID,PollServiceTextureEventArgs> m_pollservices = new Dictionary<UUID,PollServiceTextureEventArgs>();
 
@@ -134,17 +135,13 @@ namespace OpenSim.Region.ClientStack.Linden
             }
 
             if (m_NumberScenes == 1)
-            {                          
-                for (int i = 1; i <= 2; i++)
+            {
+                m_running = true;
+                for (int i = 0; i < 4; i++)
                 {
-                    Util.FireAndForget(
-                        delegate
-                        {
-                            // We give each thread its own handler.
-                            GetTextureHandler getTextureHandler = new GetTextureHandler(m_assetService);
-                            DoTextureRequests(getTextureHandler);
-                        }, null,
-                        String.Format("GetTextureWorker{0}",i), false);
+                    m_queueTimer[i] = new System.Threading.Timer(
+                                           delegate { DoTextureRequests(); },
+                                           null, 0, Timeout.Infinite);
                 }
             }
         }
@@ -167,7 +164,7 @@ namespace OpenSim.Region.ClientStack.Linden
                         m_queue.Clear();
 
                         // Wake the threads so they will notice m_running = false and end.
-                        m_signal.Set(); 
+                        m_signal.Set();
                     }
                 }
                 catch { }
@@ -187,13 +184,13 @@ namespace OpenSim.Region.ClientStack.Linden
         {
             private List<Hashtable> requests =
                     new List<Hashtable>();
-            private Dictionary<UUID, APollResponse> responses =
-                    new Dictionary<UUID, APollResponse>();
-            private HashSet<UUID> dropedResponses = new HashSet<UUID>();
+            private Dictionary<UUID, aPollResponse> responses =
+                    new Dictionary<UUID, aPollResponse>();
 
             private Scene m_scene;
+
             public PollServiceTextureEventArgs(UUID pId, Scene scene) :
-                    base(null, "", null, null, null, null, pId, int.MaxValue)              
+                    base(null, "", null, null, null, null, pId, int.MaxValue)
             {
                 m_scene = scene;
                 // x is request id, y is userid
@@ -202,16 +199,6 @@ namespace OpenSim.Region.ClientStack.Linden
                     lock (responses)
                          return responses.ContainsKey(x);
                 };
-
-                Drop = (x, y) =>
-                {
-                    lock (responses)
-                    {
-                        responses.Remove(x);
-                        dropedResponses.Add(x);
-                    }
-               };
-
                 GetEvents = (x, y) =>
                 {
                     lock (responses)
@@ -232,7 +219,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 {
                     if (x != UUID.Zero)
                     {
-                        APollRequest reqinfo = new APollRequest();
+                        aPollRequest reqinfo = new aPollRequest();
                         reqinfo.thepoll = this;
                         reqinfo.reqID = x;
                         reqinfo.request = y;
@@ -240,7 +227,7 @@ namespace OpenSim.Region.ClientStack.Linden
                         lock (m_queueSync)
                         {
                             m_queue.Enqueue(reqinfo);
-                            m_signal.Set(); // Wake up worker threads so they will process requests.
+                            m_signal.Set();
                         }
                     }
                 };
@@ -254,11 +241,13 @@ namespace OpenSim.Region.ClientStack.Linden
                     response["str_response_string"] = "Script timeout";
                     response["content_type"] = "text/plain";
                     response["keepalive"] = false;
+                    response["reusecontext"] = false;
+
                     return response;
                 };
             }
 
-            public void Process(APollRequest requestinfo, GetTextureHandler getHandler)
+            public void Process(aPollRequest requestinfo, GetTextureHandler getHandler)
             {
                 Hashtable response;
 
@@ -276,9 +265,10 @@ namespace OpenSim.Region.ClientStack.Linden
                     response["str_response_string"] = "Script timeout";
                     response["content_type"] = "text/plain";
                     response["keepalive"] = false;
+                    response["reusecontext"] = false;
 
                     lock (responses)
-                        responses[requestID] = new APollResponse() {bytes = 0, response = response};
+                        responses[requestID] = new aPollResponse() {bytes = 0, response = response};
 
                     return;
                 }
@@ -286,7 +276,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 response = getHandler.Handle(requestinfo.request);
                 lock (responses)
                 {
-                    responses[requestID] = new APollResponse()
+                    responses[requestID] = new aPollResponse()
                                                {
                                                    bytes = (int)response["int_bytes"],
                                                    response = response,
@@ -345,57 +335,55 @@ namespace OpenSim.Region.ClientStack.Linden
             }
         }
 
-        private static bool TryDequeue(out APollRequest poolreq)
+        private static void DoTextureRequests()
         {
-            lock (m_queueSync)
-            {
-                if (m_running)
-                {
-                    if (m_queue.Count > 0)
-                    {
-                        poolreq = m_queue.Dequeue();
-                        return true;
-                    }
-
-                    try
-                    {
-                        // Reset flag to wait for a new request.
-                        m_signal.Reset();
-                    }
-                    catch { }
-                }
-            }
-
-            // Wait until there are new requests.
-            // We want to wait outside of the lock.
-            if (m_running)
-                try
-                {
-                    m_signal.WaitOne();
-                }
-                catch { }
-
-            poolreq = new APollRequest();
-            return false;
-        }
-
-        private static void DoTextureRequests(GetTextureHandler getHandler)
-        {
+            // We give each thread its own handler.
+            GetTextureHandler getHandler = new GetTextureHandler(m_assetService);
             while (m_running)
             {
-                APollRequest poolreq;
-                if (TryDequeue(out poolreq))
+                try
                 {
+                    aPollRequest poolreq = new aPollRequest();
+                    bool wait = false;
+                    lock (m_queueSync)
+                    {
+                        if (m_queue.Count > 0)
+                        {
+                            poolreq = m_queue.Dequeue();
+                            m_signal.Set();
+                        }
+                        else
+                        {
+                            // Reset flag to wait for a new requests.
+                            m_signal.Reset();
+                            wait = true;
+                        }
+                    }
+
                     try
                     {
-                        poolreq.thepoll.Process(poolreq, getHandler);
-
-                        // Make sure the thread stays awake while there are requests.
-                        m_signal.Set();                    
+                        if (wait)
+                        {
+                            m_signal.WaitOne();
+                        }
+                        else
+                        {
+                            poolreq.thepoll.Process(poolreq, getHandler);
+                        }
                     }
                     catch { }
+
+                    // Make sure the thread stays awake while there are requests.
+                    m_signal.Set();
                 }
+                catch { }
             }
+            // exiting the thread now
+            try
+            {
+                m_signal.Set(); // Wake other threads as well so they will end.
+            }
+            catch { }
         }
     }
 }
