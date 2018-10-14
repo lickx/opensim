@@ -1,4 +1,4 @@
-/* 10 october 2018
+/* 30 August 2018
  * 
  * Copyright (c) Contributors, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
@@ -79,9 +79,9 @@ namespace OpenSim.Region.ClientStack.Linden
         private static object m_queueSync = new object();
         private static volatile bool m_running = true;
 
-		private static Thread[] m_queueThread = new Thread[4];
+        private static System.Threading.Timer[] m_queueTimer = new System.Threading.Timer[4] { null, null, null, null };
 
-		private Dictionary<UUID,PollServiceTextureEventArgs> m_pollservices = new Dictionary<UUID,PollServiceTextureEventArgs>();
+        private Dictionary<UUID,PollServiceTextureEventArgs> m_pollservices = new Dictionary<UUID,PollServiceTextureEventArgs>();
 
         private string m_Url = "localhost";
 
@@ -137,17 +137,14 @@ namespace OpenSim.Region.ClientStack.Linden
             if (m_NumberScenes == 1)
             {
                 m_running = true;
-				for (int i = 0; i < m_queueThread.Length; i++)
-				{
-					try
-					{
-						m_queueThread[i] = new Thread(DoTextureRequests);
-						m_queueThread[i].Start();
-					}
-					catch { }
-				}
-			}
-		}
+                for (int i = 0; i < 4; i++)
+                {
+                    m_queueTimer[i] = new System.Threading.Timer(
+                                           delegate { DoTextureRequests(); },
+                                           null, 0, Timeout.Infinite);
+                }
+            }
+        }
 
         public void PostInitialise()
         {
@@ -171,21 +168,8 @@ namespace OpenSim.Region.ClientStack.Linden
                     }
                 }
                 catch { }
-
-				Thread.Sleep(50);
-
-				for (int i = 0; i < m_queueThread.Length; i++)
-				{
-					try
-					{
-						m_queueThread[i].Abort();
-						m_queueThread[i] = null;
-					}
-					catch
-					{ }
-				}
-			}
-		}
+            }
+        }
 
         public string Name { get { return "GetTextureModule"; } }
 
