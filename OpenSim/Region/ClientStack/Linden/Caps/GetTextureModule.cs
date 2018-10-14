@@ -52,11 +52,12 @@ namespace OpenSim.Region.ClientStack.Linden
     public class GetTextureModule : INonSharedRegionModule
     {
 
-        struct APollRequest
+        class APollRequest
         {
             public PollServiceTextureEventArgs thepoll;
             public UUID reqID;
             public Hashtable request;
+            public bool send503;
         }
 
         public class APollResponse
@@ -70,18 +71,14 @@ namespace OpenSim.Region.ClientStack.Linden
 
         private Scene m_scene;
 
-        private static IAssetService m_assetService = null;
+        private static GetTextureHandler m_getTextureHandler;
+
+        private IAssetService m_assetService = null;
 
         private Dictionary<UUID, string> m_capsDict = new Dictionary<UUID, string>();
+        private static Thread[] m_workerThreads = null;
         private static int m_NumberScenes = 0;
-
-        private static Queue<APollRequest> m_queue = new Queue<APollRequest>();
-        private static ManualResetEvent m_signal = new ManualResetEvent(true);
-
-        private static object m_queueSync = new object();
-        private static volatile bool m_running = true;
-
-		private static Thread[] m_queueThread = new Thread[4];
+        private static BlockingCollection<APollRequest> m_queue = new BlockingCollection<APollRequest>();
 
         private Dictionary<UUID,PollServiceTextureEventArgs> m_pollservices = new Dictionary<UUID,PollServiceTextureEventArgs>();
 
@@ -95,60 +92,60 @@ namespace OpenSim.Region.ClientStack.Linden
 
             if (config == null)
                 return;
-
+/*
+            m_URL = config.GetString("Cap_GetTexture", string.Empty);
+            // Cap doesn't exist
+            if (m_URL != string.Empty)
+            {
+                m_Enabled = true;
+                m_RedirectURL = config.GetString("GetTextureRedirectURL");
+            }
+*/
             m_Url = config.GetString("Cap_GetTexture", "localhost");
         }
 
         public void AddRegion(Scene s)
         {
             m_scene = s;
-
-            if (m_assetService == null) // Only need to set this once.
-            {
-                m_assetService = s.AssetService;
-            }
         }
 
         public void RemoveRegion(Scene s)
         {
-            m_scene.EventManager.OnRegisterCaps -= RegisterCaps;
-            m_scene.EventManager.OnDeregisterCaps -= DeregisterCaps;
-
+            s.EventManager.OnRegisterCaps -= RegisterCaps;
+            s.EventManager.OnDeregisterCaps -= DeregisterCaps;
             m_NumberScenes--;
             m_scene = null;
-
-            if (m_NumberScenes <= 0)
-            {
-                m_running = false;
-            }
         }
 
         public void RegionLoaded(Scene s)
         {
-            m_scene.EventManager.OnRegisterCaps += RegisterCaps;
-            m_scene.EventManager.OnDeregisterCaps += DeregisterCaps;
-
-            m_NumberScenes++;
-            m_running = true;
-
-            if (m_assetService == null) // Only need to set this once.
+            if(m_assetService == null)
             {
-                m_assetService = m_scene.AssetService;
+                m_assetService = s.RequestModuleInterface<IAssetService>();
+                // We'll reuse the same handler for all requests.
+                m_getTextureHandler = new GetTextureHandler(m_assetService);
             }
 
-            if (m_NumberScenes == 1)
+            s.EventManager.OnRegisterCaps += RegisterCaps;
+            s.EventManager.OnDeregisterCaps += DeregisterCaps;
+
+            m_NumberScenes++;
+
+            if (m_workerThreads == null)
             {
-                m_running = true;
-				for (int i = 0; i < m_queueThread.Length; i++)
-				{
-					try
-					{
-						m_queueThread[i] = new Thread(DoTextureRequests);
-						m_queueThread[i].Start();
-					}
-					catch { }
-				}
-			}
+                m_workerThreads = new Thread[2];
+
+                for (uint i = 0; i < 2; i++)
+                {
+                    m_workerThreads[i] = WorkManager.StartThread(DoTextureRequests,
+                            String.Format("GetTextureWorker{0}", i),
+                            ThreadPriority.Normal,
+                            true,
+                            false,
+                            null,
+                            int.MaxValue);
+                }
+            }
         }
 
         public void PostInitialise()
@@ -157,36 +154,15 @@ namespace OpenSim.Region.ClientStack.Linden
 
         public void Close()
         {
-            if (m_NumberScenes <= 0)
+            if(m_NumberScenes <= 0 && m_workerThreads != null)
             {
                 m_log.DebugFormat("[GetTextureModule] Closing");
 
-                try
-                {
-                    lock (m_queueSync)
-                    {
-                        m_running = false;
-                        m_queue.Clear();
+                foreach (Thread t in m_workerThreads)
+                    Watchdog.AbortThread(t.ManagedThreadId);
 
-                        // Wake the threads so they will notice m_running = false and end.
-                        m_signal.Set();
-                    }
-                }
-                catch { }
-
-				Thread.Sleep(50);
-
-				for (int i = 0; i < m_queueThread.Length; i++)
-				{
-					try
-					{
-						m_queueThread[i].Abort();
-						m_queueThread[i] = null;
-					}
-					catch
-					{ }
-				}
-			}
+                m_queue.Dispose();
+            }
         }
 
         public string Name { get { return "GetTextureModule"; } }
@@ -204,9 +180,10 @@ namespace OpenSim.Region.ClientStack.Linden
                     new List<Hashtable>();
             private Dictionary<UUID, APollResponse> responses =
                     new Dictionary<UUID, APollResponse>();
+            private HashSet<UUID> dropedResponses = new HashSet<UUID>();
 
             private Scene m_scene;
-            
+            private ScenePresence m_presence;
             public PollServiceTextureEventArgs(UUID pId, Scene scene) :
                     base(null, "", null, null, null, null, pId, int.MaxValue)              
             {
@@ -215,8 +192,30 @@ namespace OpenSim.Region.ClientStack.Linden
                 HasEvents = (x, y) =>
                 {
                     lock (responses)
-						return responses.ContainsKey(x);
+                    {
+                        APollResponse response;
+                        if (responses.TryGetValue(x, out response))
+                        {
+                            if (m_presence == null)
+                                m_presence = m_scene.GetScenePresence(pId);
+
+                            if (m_presence == null || m_presence.IsDeleted)
+                                return true;
+                            return m_presence.CapCanSendAsset(0, response.bytes);
+                        }
+                        return false;
+                    }
                 };
+
+                Drop = (x, y) =>
+                {
+                    lock (responses)
+                    {
+                        responses.Remove(x);
+                        dropedResponses.Add(x);
+                    }
+               };
+
                 GetEvents = (x, y) =>
                 {
                     lock (responses)
@@ -231,41 +230,50 @@ namespace OpenSim.Region.ClientStack.Linden
                         }
                     }
                 };
-
                 // x is request id, y is request data hashtable
                 Request = (x, y) =>
                 {
-					if (x != UUID.Zero)
-					{
-                    	APollRequest reqinfo = new APollRequest();
-                    	reqinfo.thepoll = this;
-                    	reqinfo.reqID = x;
-                    	reqinfo.request = y;
-                    	
-                    	lock (m_queueSync)
-                    	{
-							m_queue.Enqueue(reqinfo);
-							m_signal.Set();
+                    APollRequest reqinfo = new APollRequest();
+                    reqinfo.thepoll = this;
+                    reqinfo.reqID = x;
+                    reqinfo.request = y;
+                    reqinfo.send503 = false;
+
+                    lock (responses)
+                    {
+                        if (responses.Count > 0)
+                        {
+                            if (m_queue.Count >= 4)
+                            {
+                                // Never allow more than 4 fetches to wait
+                                reqinfo.send503 = true;
+                            }
                         }
                     }
+                    m_queue.Add(reqinfo);
                 };
 
                 // this should never happen except possible on shutdown
                 NoEvents = (x, y) =>
                 {
+/*
+                    lock (requests)
+                    {
+                        Hashtable request = requests.Find(id => id["RequestID"].ToString() == x.ToString());
+                        requests.Remove(request);
+                    }
+*/
                     Hashtable response = new Hashtable();
 
                     response["int_response_code"] = 500;
                     response["str_response_string"] = "Script timeout";
                     response["content_type"] = "text/plain";
                     response["keepalive"] = false;
-                    response["reusecontext"] = false;
-
                     return response;
                 };
             }
 
-            public void Process(APollRequest requestinfo, GetTextureHandler getHandler)
+            public void Process(APollRequest requestinfo)
             {
                 Hashtable response;
 
@@ -274,34 +282,70 @@ namespace OpenSim.Region.ClientStack.Linden
                 if(m_scene.ShuttingDown)
                     return;
 
-				// If the avatar is gone, don't bother to get the texture
-                if (m_scene.GetScenePresence(Id) == null)
-                {
-                    response = new Hashtable();
-
-                    response["int_response_code"] = 500;
-                    response["str_response_string"] = "Script timeout";
-                    response["content_type"] = "text/plain";
-                    response["keepalive"] = false;
-                    response["reusecontext"] = false;
-
-                    lock (responses)
-                        responses[requestID] = new APollResponse() {bytes = 0, response = response};
-
-                    return;
-                }
-
-                response = getHandler.Handle(requestinfo.request);
                 lock (responses)
                 {
+                    lock(dropedResponses)
+                    {
+                        if(dropedResponses.Contains(requestID))
+                        {
+                            dropedResponses.Remove(requestID);
+                            return;
+                        }
+                    }
+
+                    if (requestinfo.send503)
+                    {
+                        response = new Hashtable();
+
+                        response["int_response_code"] = 503;
+                        response["str_response_string"] = "Throttled";
+                        response["content_type"] = "text/plain";
+                        response["keepalive"] = false;
+
+                        Hashtable headers = new Hashtable();
+                        headers["Retry-After"] = 30;
+                        response["headers"] = headers;
+
+                        responses[requestID] = new APollResponse() {bytes = 0, response = response};
+
+                        return;
+                    }
+
+                // If the avatar is gone, don't bother to get the texture
+                    if (m_scene.GetScenePresence(Id) == null)
+                    {
+                        response = new Hashtable();
+
+                        response["int_response_code"] = 500;
+                        response["str_response_string"] = "Script timeout";
+                        response["content_type"] = "text/plain";
+                        response["keepalive"] = false;
+
+                        responses[requestID] = new APollResponse() {bytes = 0, response = response};
+
+                        return;
+                    }
+                }
+
+                response = m_getTextureHandler.Handle(requestinfo.request);
+
+                lock (responses)
+                {
+                    lock(dropedResponses)
+                    {
+                        if(dropedResponses.Contains(requestID))
+                        {
+                            dropedResponses.Remove(requestID);
+                            return;
+                        }
+                    }
                     responses[requestID] = new APollResponse()
-                                               {
-                                                   bytes = (int)response["int_bytes"],
-                                                   response = response,
-                                               };
+                        {
+                            bytes = (int) response["int_bytes"],
+                            response = response
+                        };
                 } 
             }
-
         }
 
         private void RegisterCaps(UUID agentID, Caps caps)
@@ -355,53 +399,23 @@ namespace OpenSim.Region.ClientStack.Linden
 
         private static void DoTextureRequests()
         {
-            // We give each thread its own handler.
-            GetTextureHandler getHandler = new GetTextureHandler(m_assetService);
-            while (m_running)
+            APollRequest poolreq;
+            while (m_NumberScenes > 0)
             {
-                try
+                poolreq = null;
+                if(!m_queue.TryTake(out poolreq, 4500) || poolreq == null)
                 {
-                    APollRequest poolreq = new APollRequest();
-                    bool wait = false;
-                    lock (m_queueSync)
-                    {
-                        if (m_queue.Count > 0)
-                        {
-                            poolreq = m_queue.Dequeue();
-                            m_signal.Set();
-                        }
-                        else
-                        {
-                            // Reset flag to wait for a new requests.
-                            m_signal.Reset();
-                            wait = true;
-                        }
-                    }
-
-                    try
-                    {
-                        if (wait)
-                        {
-                            m_signal.WaitOne();
-                        }
-                        else
-                        {
-                            poolreq.thepoll.Process(poolreq, getHandler);
-                        }
-                    }
-                    catch { }
-
-                    // Make sure the thread stays awake while there are requests.
-                    m_signal.Set();
+                    Watchdog.UpdateThread();
+                    continue;
                 }
-                catch { }
+
+                if(m_NumberScenes <= 0)
+                   break;
+          
+                Watchdog.UpdateThread();
+                if(poolreq.reqID != UUID.Zero)
+                    poolreq.thepoll.Process(poolreq);
             }
-            // exiting the thread now
-            try
-            {
-                m_signal.Set(); // Wake other threads as well so they will end.
-            }
-            catch { }
         }
     }
 }
