@@ -1238,6 +1238,8 @@ namespace OpenSim.Region.PhysicsModule.BulletS
         {
             if (!m_initialized) return;
 
+/* mantis 8397 ??? avoid out of order operations ???
+
             if (Monitor.TryEnter(PhysicsEngineLock))
             {
                 // If we can get exclusive access to the physics engine, just do the operation
@@ -1246,12 +1248,13 @@ namespace OpenSim.Region.PhysicsModule.BulletS
             }
             else
             {
+*/
                 // The physics engine is busy, queue the operation
                 lock (_taintLock)
                 {
                     _taintOperations.Add(new TaintCallbackEntry(pOriginator, pIdent, pCallback));
                 }
-            }
+//            }
         }
 
         private void TriggerPreStepEvent(float timeStep)
