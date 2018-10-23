@@ -1181,6 +1181,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_LSL_Functions.llMoveToTarget(target, tau);
         }
 
+        public LSL_Key llName2Key(LSL_String name)
+        {
+            return m_LSL_Functions.llName2Key(name);
+        }
+
         public void llOffsetTexture(double u, double v, int face)
         {
             m_LSL_Functions.llOffsetTexture(u, v, face);

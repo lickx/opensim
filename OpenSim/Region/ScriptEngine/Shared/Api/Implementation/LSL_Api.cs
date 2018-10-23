@@ -6844,7 +6844,25 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return String.Empty;
         }
 
+        public LSL_Key llName2Key(LSL_String name)
+        {
+            m_host.AddScriptLPS(1);
 
+            foreach (ScenePresence sp in World.GetScenePresences())
+            {
+                if (sp.IsDeleted || sp.IsChildAgent)
+                    continue;
+
+                string test = sp.ControllingClient.Name;
+                if (!name.Contains(" "))
+                    test = test.Replace(" ", ".");
+
+                if (String.Compare(name, test, true) == 0)
+                    return sp.UUID.ToString();
+            }
+
+            return UUID.Zero.ToString();
+        }
 
         public void llSetTextureAnim(int mode, int face, int sizex, int sizey, double start, double length, double rate)
         {
