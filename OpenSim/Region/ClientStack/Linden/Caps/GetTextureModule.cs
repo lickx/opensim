@@ -215,7 +215,7 @@ namespace OpenSim.Region.ClientStack.Linden
             private Scene m_scene;
 
             public PollServiceTextureEventArgs(UUID pId, Scene scene) :
-                    base(null, "", null, null, null, pId, int.MaxValue)
+                    base(null, "", null, null, null, null, pId, int.MaxValue)
             {
                 m_scene = scene;
                 // x is request id, y is userid

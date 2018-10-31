@@ -253,7 +253,7 @@ namespace OpenSim.Region.ClientStack.Linden
             private Scene m_scene;
 
             public PollServiceMeshEventArgs(string uri, UUID pId, Scene scene) :
-                base(null, uri, null, null, null, pId, int.MaxValue)
+                base(null, uri, null, null, null, null, pId, int.MaxValue)
             {
                 m_scene = scene;
                 // x is request id, y is userid
