@@ -35,6 +35,7 @@ using log4net;
 using Nini.Config;
 using Mono.Addins;
 using OpenMetaverse;
+using OpenSim.Framework;
 using OpenSim.Framework.Servers;
 using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Framework.Interfaces;
@@ -71,11 +72,8 @@ namespace OpenSim.Region.ClientStack.Linden
         private Dictionary<UUID, string> m_capsDict = new Dictionary<UUID, string>();
         private static int m_NumberScenes = 0;
 
-        private static BlockingCollection<aPollRequest> m_queue = null;
+        private static NConcurrentQueue<aPollRequest> m_queue = null;
         private static volatile bool m_running   = true;
-
-        private static CancellationTokenSource m_tokenSource = null;
-        private static CancellationToken m_cancelToken;
 
         private static Thread[] m_queueThread = new Thread[4];
 
@@ -131,14 +129,7 @@ namespace OpenSim.Region.ClientStack.Linden
 
             if (m_queue == null)
             {
-                m_queue = new BlockingCollection<aPollRequest>();
-            }
-
-            // Define the cancellation token.
-            if (m_tokenSource == null)
-            {
-                m_tokenSource = new CancellationTokenSource();
-                m_cancelToken = m_tokenSource.Token;
+                m_queue = new NConcurrentQueue<aPollRequest>();
             }
 
             m_NumberScenes++;
@@ -172,14 +163,12 @@ namespace OpenSim.Region.ClientStack.Linden
                 try
                 {
                     m_running = false;
-                    m_tokenSource.Cancel();
+                    m_queue.CancelWait();
                     Thread.Sleep(50);
-                    m_queue.Dispose();
-                    m_tokenSource.Dispose();
+                    m_queue.Destroy();
                 }
                 catch { }
                 m_queue = null;
-                m_tokenSource = null;
 
                 Thread.Sleep(50);
 
@@ -251,7 +240,7 @@ namespace OpenSim.Region.ClientStack.Linden
 
                         try
                         {
-                            m_queue.Add(reqinfo);
+                            m_queue.Enqueue(reqinfo);
                         }
                         catch { }
                     }
@@ -368,16 +357,10 @@ namespace OpenSim.Region.ClientStack.Linden
                 try
                 {
                     aPollRequest pollreq;
-                    if (m_queue.TryTake(out pollreq,
-                                        -1, // -1 = INFINITE
-                                        m_cancelToken))
+                    if (m_queue.TryDequeue(out pollreq) && m_running)
                     {
                         pollreq.thepoll.Process(pollreq, getHandler);
                     }
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
                 }
                 catch { }
             }
