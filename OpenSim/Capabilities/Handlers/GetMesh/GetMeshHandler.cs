@@ -165,42 +165,14 @@ namespace OpenSim.Capabilities.Handlers
                                     int len = end - start + 1;
 
                                     //m_log.Debug("Serving " + start + " to " + end + " of " + texture.Data.Length + " bytes for texture " + texture.ID);
+                                    responsedata["int_response_code"] =
+                                        (int)System.Net.HttpStatusCode.PartialContent;
+                                    headers["Content-Range"] = String.Format("bytes {0}-{1}/{2}", start, end, mesh.Data.Length);
 
-                                    if (start > 20000)
-                                    {
-                                        responsedata["int_lod"] = 3;
-                                    }
-                                    else if (start < 4097)
-                                    {
-                                        responsedata["int_lod"] = 1;
-                                    }
-                                    else
-                                    {
-                                        responsedata["int_lod"] = 2;
-                                    }
-
-                                    if (start == 0 && len == mesh.Data.Length) // well redudante maybe
-                                    {
-                                        responsedata["int_response_code"] = (int)System.Net.HttpStatusCode.OK;
-                                        responsedata["bin_response_data"] = mesh.Data;
-                                        responsedata["int_bytes"] = mesh.Data.Length;
-                                        //responsedata["reusecontext"] = false;
-                                        responsedata["int_lod"] = 3;
-
-                                    }
-                                    else
-                                    {
-                                        responsedata["int_response_code"] =
-                                            (int)System.Net.HttpStatusCode.PartialContent;
-                                        headers["Content-Range"] = String.Format("bytes {0}-{1}/{2}", start, end,
-                                                                                 mesh.Data.Length);
-
-                                        byte[] d = new byte[len];
-                                        Array.Copy(mesh.Data, start, d, 0, len);
-                                        responsedata["bin_response_data"] = d;
-                                        responsedata["int_bytes"] = len;
-                                        //responsedata["reusecontext"] = false;
-                                    }
+                                    byte[] d = new byte[len];
+                                    Array.Copy(mesh.Data, start, d, 0, len);
+                                    responsedata["bin_response_data"] = d;
+                                    responsedata["int_bytes"] = len;
                                 }
                             }
                             else
