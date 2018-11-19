@@ -276,7 +276,7 @@ namespace OpenSim.Region.ClientStack.Linden
                     response = new Hashtable();
 
                     response["int_response_code"] = 500;
-                    response["str_response_string"] = "Script timeout";
+                    response["str_response_string"] = "timeout";
                     response["content_type"] = "text/plain";
                     response["keepalive"] = false;
                     response["reusecontext"] = false;
