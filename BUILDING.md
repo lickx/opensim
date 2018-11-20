@@ -7,32 +7,26 @@ Steps:
  * copy OpenSim.ini.example to OpenSim.ini and other appropriate files in bin/config-include
  * run OpenSim.exe
 
-# Building on Linux
+# Building on Linux / Mac
 
 Prereqs:
-*	Mono >= 2.4.3
-*	Nant >= 0.85
+*	Mono > 5.0
 *	On some Linux distributions you may need to install additional packages.
-	See http://opensimulator.org/wiki/Dependencies for more information.
-*	May also use xbuild (included in mono distributions)
-*	May use Monodevelop, a cross-platform IDE
+*	msbuild or xbuild if still supported by the mono version
+*   See http://opensimulator.org/wiki/Dependencies for more information.
 
 From the distribution type:
  * ./runprebuild.sh
- * nant (or !* xbuild)
+ * type msbuild or xbuild
  * cd bin 
  * copy OpenSim.ini.example to OpenSim.ini and other appropriate files in bin/config-include
- * run mono OpenSim.exe
- !* xbuild option switches
- !*          clean:  xbuild /target:clean
- !*          debug: (default) xbuild /property:Configuration=Debug
- !*          release: xbuild /property:Configuration=Release
-
-# Using Monodevelop
-
-From the distribution type:
- * ./runprebuild.sh
- * type monodevelop OpenSim.sln
+ * review and change those ini files according to your needs
+ * windows: execute opensim.exe or opensim32.exe for small regions
+ * linux: run ./opensim.sh
+ * msbuild (xbuild) option switches
+   *  clean:  msbuild /target:clean
+   *  debug: (default) msbuild /property:Configuration=Debug
+   *  release: msbuild /property:Configuration=Release
 
 # References
  
