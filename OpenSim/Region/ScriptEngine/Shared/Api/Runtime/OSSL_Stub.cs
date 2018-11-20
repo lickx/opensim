@@ -136,11 +136,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_OSSL_Functions.osParcelSetDetails(pos,rules);
         }
 
-        public double osList2Double(LSL_Types.list src, int index)
-        {
-            return m_OSSL_Functions.osList2Double(src, index);
-        }
-
         public string osSetDynamicTextureURL(string dynamicID, string contentType, string url, string extraParams,
                                              int timer)
         {
@@ -1291,6 +1286,56 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public LSL_String osGetAgentCountry(LSL_Key agentId)
         {
             return m_OSSL_Functions.osGetAgentCountry(agentId);
+        }
+
+        public LSL_String osStringSubString(LSL_String src, LSL_Integer offset)
+        {
+            return m_OSSL_Functions.osStringSubString(src, offset);
+        }
+
+        public LSL_String osStringSubString(LSL_String src, LSL_Integer offset, LSL_Integer length)
+        {
+            return m_OSSL_Functions.osStringSubString(src, offset, length);
+        }
+
+        public LSL_Integer osStringStartsWith(LSL_String src, LSL_String value, LSL_Integer ignorecase)
+        {
+            return m_OSSL_Functions.osStringStartsWith(src, value, ignorecase);
+        }
+
+        public LSL_Integer osStringEndsWith(LSL_String src, LSL_String value, LSL_Integer ignorecase)
+        {
+            return m_OSSL_Functions.osStringEndsWith(src, value, ignorecase);
+        }
+
+        public LSL_Integer osStringIndexOf(LSL_String src, LSL_String value, LSL_Integer ignorecase)
+        {
+            return m_OSSL_Functions.osStringIndexOf(src, value, ignorecase);
+        }
+
+        public LSL_Integer osStringIndexOf(LSL_String src, LSL_String value, LSL_Integer offset, LSL_Integer count, LSL_Integer ignorecase)
+        {
+            return m_OSSL_Functions.osStringIndexOf(src, value, offset, count, ignorecase);
+        }
+
+        public LSL_Integer osStringLastIndexOf(LSL_String src, LSL_String value, LSL_Integer ignorecase)
+        {
+            return m_OSSL_Functions.osStringLastIndexOf(src, value, ignorecase);
+        }
+
+        public LSL_Integer osStringLastIndexOf(LSL_String src, LSL_String value, LSL_Integer offset, LSL_Integer count, LSL_Integer ignorecase)
+        {
+            return m_OSSL_Functions.osStringLastIndexOf(src, value, offset, count, ignorecase);
+        }
+
+        public LSL_String osStringRemove(LSL_String src, LSL_Integer offset, LSL_Integer count)
+        {
+            return m_OSSL_Functions.osStringRemove(src, offset, count);
+        }
+
+        public LSL_String osStringReplace(LSL_String src, LSL_String oldvalue, LSL_String newvalue)
+        {
+            return m_OSSL_Functions.osStringReplace(src, oldvalue, newvalue);
         }
     }
 }
