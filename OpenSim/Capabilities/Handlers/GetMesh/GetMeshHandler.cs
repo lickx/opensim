@@ -64,7 +64,10 @@ namespace OpenSim.Capabilities.Handlers
             Hashtable ret = new Hashtable();
             ret["int_response_code"] = (int)System.Net.HttpStatusCode.NotFound;
             ret["content_type"] = "text/plain";
+            ret["keepalive"] = false;
+            ret["reusecontext"] = false;
             ret["int_bytes"] = 0;
+            ret["int_lod"] = 0;
             string MeshStr = (string)request["mesh_id"];
 
 
@@ -73,39 +76,37 @@ namespace OpenSim.Capabilities.Handlers
             if (m_assetService == null)
             {
                 m_log.Error("[GETMESH]: Cannot fetch mesh " + MeshStr + " without an asset service");
-                ret["keepalive"] = false;
-                return ret;
             }
 
             UUID meshID;
             if (!String.IsNullOrEmpty(MeshStr) && UUID.TryParse(MeshStr, out meshID))
             {
                 //                m_log.DebugFormat("[GETMESH]: Received request for mesh id {0}", meshID);
-
-
                 ret = ProcessGetMesh(request, UUID.Zero, null);
-
-
             }
             else
             {
                 m_log.Warn("[GETMESH]: Failed to parse a mesh_id from GetMesh request: " + (string)request["uri"]);
             }
 
-
             return ret;
         }
+
         public Hashtable ProcessGetMesh(Hashtable request, UUID AgentId, Caps cap)
         {
             Hashtable responsedata = new Hashtable();
             responsedata["int_response_code"] = 400; //501; //410; //404;
             responsedata["content_type"] = "text/plain";
+            responsedata["keepalive"] = false; // seems always to be false.
+            responsedata["str_response_string"] = "Request wasn't what was expected";
+            responsedata["reusecontext"] = false; // seems always to be false.
+            responsedata["int_lod"] = 0;
             responsedata["int_bytes"] = 0;
 
-            string meshStr = string.Empty;
+            if (!request.ContainsKey("mesh_id"))
+                return responsedata;
 
-            if (request.ContainsKey("mesh_id"))
-                meshStr = request["mesh_id"].ToString();
+            string meshStr = request["mesh_id"].ToString();
 
             UUID meshID = UUID.Zero;
             if (!String.IsNullOrEmpty(meshStr) && UUID.TryParse(meshStr, out meshID))
@@ -113,17 +114,21 @@ namespace OpenSim.Capabilities.Handlers
                 if (m_assetService == null)
                 {
                     responsedata["int_response_code"] = 404; //501; //410; //404;
-                    responsedata["keepalive"] = false;
+                    //responsedata["content_type"] = "text/plain";
+                    //responsedata["keepalive"] = false;
                     responsedata["str_response_string"] = "The asset service is unavailable.  So is your mesh.";
+                    //responsedata["reusecontext"] = false;
                     return responsedata;
                 }
 
+                // This will first try the cache
                 AssetBase mesh = m_assetService.Get(meshID.ToString());
 
                 if (mesh != null)
                 {
                     if (mesh.Type == (SByte)AssetType.Mesh)
                     {
+
                         Hashtable headers = new Hashtable();
                         responsedata["headers"] = headers;
 
@@ -146,8 +151,11 @@ namespace OpenSim.Capabilities.Handlers
                                 if (start >= mesh.Data.Length)
                                 {
                                     responsedata["int_response_code"] = 404; //501; //410; //404;
-                                    responsedata["content_type"] = "text/plain";
+                                    //responsedata["content_type"] = "text/plain";
+                                    //responsedata["keepalive"] = false;
                                     responsedata["str_response_string"] = "This range doesnt exist.";
+                                    //responsedata["reusecontext"] = false;
+                                    responsedata["int_lod"] = 3;
                                     return responsedata;
                                 }
                                 else
@@ -173,6 +181,8 @@ namespace OpenSim.Capabilities.Handlers
                                 responsedata["str_response_string"] = Convert.ToBase64String(mesh.Data);
                                 responsedata["content_type"] = "application/vnd.ll.mesh";
                                 responsedata["int_response_code"] = 200;
+                                //responsedata["reusecontext"] = false;
+                                responsedata["int_lod"] = 3;
                             }
                         }
                         else
@@ -180,22 +190,30 @@ namespace OpenSim.Capabilities.Handlers
                             responsedata["str_response_string"] = Convert.ToBase64String(mesh.Data);
                             responsedata["content_type"] = "application/vnd.ll.mesh";
                             responsedata["int_response_code"] = 200;
+                            //responsedata["reusecontext"] = false;
+                            responsedata["int_lod"] = 3;
                         }
                     }
                     // Optionally add additional mesh types here
                     else
                     {
                         responsedata["int_response_code"] = 404; //501; //410; //404;
-                        responsedata["content_type"] = "text/plain";
+                        //responsedata["content_type"] = "text/plain";
+                        //responsedata["keepalive"] = false;
                         responsedata["str_response_string"] = "Unfortunately, this asset isn't a mesh.";
+                        //responsedata["reusecontext"] = false;
+                        responsedata["int_lod"] = 1;
                         return responsedata;
                     }
                 }
                 else
                 {
                     responsedata["int_response_code"] = 404; //501; //410; //404;
-                    responsedata["content_type"] = "text/plain";
+                    //responsedata["content_type"] = "text/plain";
+                    //responsedata["keepalive"] = false;
                     responsedata["str_response_string"] = "Your Mesh wasn't found.  Sorry!";
+                    //responsedata["reusecontext"] = false;
+                    responsedata["int_lod"] = 0;
                     return responsedata;
                 }
             }

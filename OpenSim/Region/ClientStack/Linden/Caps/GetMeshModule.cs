@@ -32,7 +32,6 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Threading;
 using Mono.Addins;
-using OpenSim.Framework.Monitoring;
 using log4net;
 using Nini.Config;
 using OpenMetaverse;
@@ -50,40 +49,41 @@ namespace OpenSim.Region.ClientStack.Linden
     [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "GetMeshModule")]
     public class GetMeshModule : INonSharedRegionModule
     {
-//        private static readonly ILog m_log =
-//            LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-
-        private Scene m_scene;
-        private bool m_Enabled = true;
-        private string m_URL;
-
-        private string m_URL2;
-        private string m_RedirectURL = null;
-        private string m_RedirectURL2 = null;
-
-        class APollRequest
+        struct aPollRequest
         {
             public PollServiceMeshEventArgs thepoll;
             public UUID reqID;
             public Hashtable request;
         }
 
-        public class APollResponse
+        public class aPollResponse
         {
             public Hashtable response;
             public int bytes;
+            public int lod;
         }
 
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
-        private static GetMeshHandler m_getMeshHandler;
+        private Scene m_scene;
 
-        private IAssetService m_assetService = null;
+        private string m_URL;
+
+        private string m_URL2;
+        private string m_RedirectURL = null;
+        private string m_RedirectURL2 = null;
+
+        // Removed m_enable boolean since it was always true and never set to false.
+
+        private static IAssetService m_assetService = null;
 
         private Dictionary<UUID, string> m_capsDict = new Dictionary<UUID, string>();
-        private static Thread[] m_workerThreads = null;
         private static int m_NumberScenes = 0;
-        private static BlockingCollection<APollRequest> m_queue = new BlockingCollection<APollRequest>();
+
+        private static NConcurrentQueue<aPollRequest> m_queue = null;
+        private static volatile bool m_running = true;
+
+        private static Thread[] m_queueThread = new Thread[4];
 
         private Dictionary<UUID, PollServiceMeshEventArgs> m_pollservices = new Dictionary<UUID, PollServiceMeshEventArgs>();
 
@@ -104,7 +104,6 @@ namespace OpenSim.Region.ClientStack.Linden
             // Cap doesn't exist
             if (m_URL != string.Empty)
             {
-                m_Enabled = true;
                 m_RedirectURL = config.GetString("GetMeshRedirectURL");
             }
 
@@ -112,79 +111,96 @@ namespace OpenSim.Region.ClientStack.Linden
             // Cap doesn't exist
             if (m_URL2 != string.Empty)
             {
-                m_Enabled = true;
-
                 m_RedirectURL2 = config.GetString("GetMesh2RedirectURL");
             }
         }
 
         public void AddRegion(Scene pScene)
         {
-            if (!m_Enabled)
-                return;
-
             m_scene = pScene;
-        }
 
-        public void RemoveRegion(Scene s)
-        {
-            if (!m_Enabled)
-                return;
-
-            s.EventManager.OnRegisterCaps -= RegisterCaps;
-            s.EventManager.OnDeregisterCaps -= DeregisterCaps;
-            m_NumberScenes--;
-            m_scene = null;
-        }
-
-        public void RegionLoaded(Scene s)
-        {
-            if (!m_Enabled)
-                return;
-
-            if(m_assetService == null)
+            if (m_assetService == null) // Only need to set this once.
             {
-                m_assetService = m_scene.RequestModuleInterface<IAssetService>();
-                // We'll reuse the same handler for all requests.
-                m_getMeshHandler = new GetMeshHandler(m_assetService);
+                m_assetService = pScene.AssetService;
+            }
+        }
+
+        public void RemoveRegion(Scene scene)
+        {
+            m_scene.EventManager.OnRegisterCaps -= RegisterCaps;
+            m_scene.EventManager.OnDeregisterCaps -= DeregisterCaps;
+
+            m_NumberScenes--;
+
+            m_scene = null;
+
+            if (m_NumberScenes <= 0)
+            {
+                m_running = false;
+            }
+        }
+
+        public void RegionLoaded(Scene scene)
+        {
+            m_scene.EventManager.OnRegisterCaps += RegisterCaps;
+            m_scene.EventManager.OnDeregisterCaps += DeregisterCaps;
+
+            if (m_assetService == null) // Only need to set this once.
+            {
+                m_assetService = m_scene.AssetService;
             }
 
-            s.EventManager.OnRegisterCaps += RegisterCaps;          
-            s.EventManager.OnDeregisterCaps += DeregisterCaps;
+            if (m_queue == null)
+            {
+                m_queue = new NConcurrentQueue<aPollRequest>();
+            }
 
             m_NumberScenes++;
 
-            if (m_workerThreads == null)
+            if (m_NumberScenes == 1)
             {
-                m_workerThreads = new Thread[2];
-
-                for (uint i = 0; i < 2; i++)
+                m_running = true;
+                for (int i=0; i < m_queueThread.Length; i++)
                 {
-                    m_workerThreads[i] = WorkManager.StartThread(DoMeshRequests,
-                            String.Format("GetMeshWorker{0}", i),
-                            ThreadPriority.Normal,
-                            true,
-                            false,
-                            null,
-                            int.MaxValue);
+                    try
+                    {
+                        m_queueThread[i] = new Thread(DoMeshRequests);
+                        m_queueThread[i].Priority = ThreadPriority.Normal;
+                        m_queueThread[i].Start();
+                    }
+                    catch { }
                 }
             }
         }
 
         public void Close()
         {
-            if(m_NumberScenes <= 0 && m_workerThreads != null)
+            if (m_NumberScenes <= 0)
             {
                 m_log.DebugFormat("[GetMeshModule] Closing");
-                foreach (Thread t in m_workerThreads)
-                    Watchdog.AbortThread(t.ManagedThreadId);
-                // This will fail on region shutdown. Its harmless.
-                // Prevent red ink.
+
                 try
                 {
-                    m_queue.Dispose();
+                    m_running = false;
+                    m_queue.CancelWait();
+                    Thread.Sleep(50);
+                    m_queue.Destroy();
                 }
-                catch {}
+                catch { }
+                m_queue = null;
+
+                Thread.Sleep(50);
+
+                for (int i = 0; i < m_queueThread.Length; i++)
+                {
+                    try
+                    {
+                        m_queueThread[i].Abort();
+                        m_queueThread[i] = null;
+                    }
+                    catch
+                    { }
+                }
             }
         }
 
@@ -194,18 +210,19 @@ namespace OpenSim.Region.ClientStack.Linden
 
         private static void DoMeshRequests()
         {
-            while (m_NumberScenes > 0)
+            // We give each thread its own handler.
+            GetMeshHandler getHandler = new GetMeshHandler(m_assetService);
+            while (m_running)
             {
-                APollRequest poolreq;
-                if(m_queue.TryTake(out poolreq, 4500))
+                try
                 {
-                    if(m_NumberScenes <= 0)
-                        break;
-          
-                    if(poolreq.reqID != UUID.Zero)
-                        poolreq.thepoll.Process(poolreq);
+                    aPollRequest pollreq;
+                    if (m_queue.TryDequeue(out pollreq ))
+                    {
+                        pollreq.thepoll.Process(pollreq, getHandler);
+                    }
                 }
-                Watchdog.UpdateThread();               
+                catch { }
             }
         }
 
@@ -213,46 +230,21 @@ namespace OpenSim.Region.ClientStack.Linden
         {
             private List<Hashtable> requests =
                     new List<Hashtable>();
-            private Dictionary<UUID, APollResponse> responses =
-                    new Dictionary<UUID, APollResponse>();
-            private HashSet<UUID> dropedResponses = new HashSet<UUID>();
+            private Dictionary<UUID, aPollResponse> responses =
+                    new Dictionary<UUID, aPollResponse>();
 
             private Scene m_scene;
-            private ScenePresence m_presence;
+
             public PollServiceMeshEventArgs(string uri, UUID pId, Scene scene) :
                 base(null, uri, null, null, null, null, pId, int.MaxValue)
             {
                 m_scene = scene;
-
                 // x is request id, y is userid
                 HasEvents = (x, y) =>
                 {
                     lock (responses)
-                    {
-                        APollResponse response;
-                        if (responses.TryGetValue(x, out response))
-                        {
-                            if (m_presence == null)
-                                m_presence = m_scene.GetScenePresence(pId);
-
-                            if (m_presence == null || m_presence.IsDeleted)
-                                return true;
-                            return m_presence.CapCanSendAsset(1, response.bytes);
-                        }
-                        return false;
-                    }
+                         return responses.ContainsKey(x);
                 };
-
-                Drop = (x, y) =>
-                {
-                    lock (responses)
-                    {
-                        responses.Remove(x);
-                        lock(dropedResponses)
-                            dropedResponses.Add(x);
-                    }
-                };
-
                 GetEvents = (x, y) =>
                 {
                     lock (responses)
@@ -270,84 +262,70 @@ namespace OpenSim.Region.ClientStack.Linden
                 // x is request id, y is request data hashtable
                 Request = (x, y) =>
                 {
-                    APollRequest reqinfo = new APollRequest();
-                    reqinfo.thepoll = this;
-                    reqinfo.reqID = x;
-                    reqinfo.request = y;
+                    if (x != UUID.Zero)
+                    {
+                        aPollRequest reqinfo = new aPollRequest();
+                        reqinfo.thepoll = this;
+                        reqinfo.reqID = x;
+                        reqinfo.request = y;
 
-                    m_queue.Add(reqinfo);
+                        try
+                        {
+                            m_queue.Enqueue(reqinfo);
+                        }
+                        catch { }
+                    }
                 };
 
                 // this should never happen except possible on shutdown
                 NoEvents = (x, y) =>
                 {
-                    /*
-                                        lock (requests)
-                                        {
-                                            Hashtable request = requests.Find(id => id["RequestID"].ToString() == x.ToString());
-                                            requests.Remove(request);
-                                        }
-                    */
                     Hashtable response = new Hashtable();
 
                     response["int_response_code"] = 500;
                     response["str_response_string"] = "timeout";
                     response["content_type"] = "text/plain";
                     response["keepalive"] = false;
+                    response["reusecontext"] = false;
+
                     return response;
                 };
             }
 
-            public void Process(APollRequest requestinfo)
+            public void Process(aPollRequest requestinfo, GetMeshHandler getHandler)
             {
-                Hashtable curresponse;
+                Hashtable response;
 
                 UUID requestID = requestinfo.reqID;
 
-                if(m_scene.ShuttingDown)
+                if (m_scene.ShuttingDown)
                     return;
 
-                lock(responses)
+                // If the avatar is gone, don't bother to get the mesh
+                if (m_scene.GetScenePresence(Id) == null)
                 {
-                    lock(dropedResponses)
-                    {
-                        if(dropedResponses.Contains(requestID))
-                        {
-                            dropedResponses.Remove(requestID);
-                            return;
-                        }
-                    }
+                    response = new Hashtable();
 
-                    // If the avatar is gone, don't bother to get the texture
-                    if(m_scene.GetScenePresence(Id) == null)
-                    {
-                        curresponse = new Hashtable();
-                        curresponse["int_response_code"] = 500;
-                        curresponse["str_response_string"] = "timeout";
-                        curresponse["content_type"] = "text/plain";
-                        curresponse["keepalive"] = false;
-                        responses[requestID] = new APollResponse() { bytes = 0, response = curresponse };
-                        return;
-                    }
+                    response["int_response_code"] = 500;
+                    response["str_response_string"] = "timeout";
+                    response["content_type"] = "text/plain";
+                    response["keepalive"] = false;
+                    response["reusecontext"] = false;
+
+                    lock (responses)
+                        responses[requestID] = new aPollResponse() { bytes = 0, response = response, lod = 0 };
+
+                    return;
                 }
 
-                curresponse = m_getMeshHandler.Handle(requestinfo.request);
-
-                lock(responses)
+                response = getHandler.Handle(requestinfo.request);
+                lock (responses)
                 {
-                    lock(dropedResponses)
+                    responses[requestID] = new aPollResponse()
                     {
-                        if(dropedResponses.Contains(requestID))
-                        {
-                            dropedResponses.Remove(requestID);
-                            return;
-                        }
-                    }
-
-                    responses[requestID] = new APollResponse()
-                    {
-                        bytes = (int)curresponse["int_bytes"],
-                        response = curresponse
+                        bytes = (int)response["int_bytes"],
+                        lod = (int)response["int_lod"],
+                        response = response,
                     };
                 }
             }
@@ -355,7 +333,6 @@ namespace OpenSim.Region.ClientStack.Linden
 
         public void RegisterCaps(UUID agentID, Caps caps)
         {
-//            UUID capID = UUID.Random();
             if (m_URL == "localhost")
             {
                 string capUrl = "/CAPS/" + UUID.Random() + "/";
