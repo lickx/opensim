@@ -1,6 +1,7 @@
 # Building on Windows
 
 Steps:
+
  * runprebuild.bat
  * Load OpenSim.sln into Visual Studio .NET and build the solution.
  * chdir bin 
@@ -10,12 +11,14 @@ Steps:
 # Building on Linux / Mac
 
 Prereqs:
-*	Mono > 5.0
-*	On some Linux distributions you may need to install additional packages.
-*	msbuild or xbuild if still supported by the mono version
-*   See http://opensimulator.org/wiki/Dependencies for more information.
+
+ *	Mono > 5.0
+ *	On some Linux distributions you may need to install additional packages.
+ *	msbuild or xbuild if still supported by the mono version
+ *   See http://opensimulator.org/wiki/Dependencies for more information.
 
 From the distribution type:
+
  * ./runprebuild.sh
  * type msbuild or xbuild
  * cd bin 
