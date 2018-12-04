@@ -81,101 +81,67 @@ namespace OpenSim.Framework.Servers.HttpServer
 
         internal void DoHTTPGruntWork(Hashtable responsedata)
         {
-            OSHttpResponse response
-                = new OSHttpResponse(new HttpResponse(HttpContext, Request), HttpContext);
-
-            byte[] buffer = srvDoHTTPGruntWork(responsedata, response);
-
-            if(Request.Body.CanRead)
+            if (Request.Body.CanRead)
                 Request.Body.Dispose();
 
-            response.SendChunked = false;
-            response.ContentLength64 = buffer.Length;
-
-            try
-            {
-                response.OutputStream.Write(buffer, 0, buffer.Length);
-                response.Send();
-                buffer = null;
-            }
-            catch (Exception ex)
-            {
-                if(ex is System.Net.Sockets.SocketException)
-                {
-                    // only mute connection reset by peer so we are not totally blind for now
-                    if(((System.Net.Sockets.SocketException)ex).SocketErrorCode != System.Net.Sockets.SocketError.ConnectionReset)
-                         m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
-                }
-                else
-                    m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
-            }
-
-            PollServiceArgs.RequestsHandled++;
-        }
-
-        internal byte[] srvDoHTTPGruntWork(Hashtable responsedata, OSHttpResponse response)
-        {
-            int responsecode;
-            string responseString = String.Empty;
-            byte[] responseBytes = null;
-            string contentType;
+            OSHttpResponse response
+                = new OSHttpResponse(new HttpResponse(HttpContext, Request));
 
             if (responsedata == null)
             {
-                responsecode = 500;
-                responseString = "No response could be obtained";
-                contentType = "text/plain";
-                responsedata = new Hashtable();
+                SendNoContentError(response);
+                return;
             }
-            else
+
+            int responsecode = 200;
+            string responseString = String.Empty;
+            string contentType;
+            byte[] buffer = null;
+            int rangeStart = 0;
+            int rangeLen = -1;
+
+            try
             {
-                try
-                {
-                    //m_log.Info("[BASE HTTP SERVER]: Doing HTTP Grunt work with response");
+                //m_log.Info("[BASE HTTP SERVER]: Doing HTTP Grunt work with response");
+                if(responsedata["int_response_code"] != null)
                     responsecode = (int)responsedata["int_response_code"];
 
-                    if (responsedata["bin_response_data"] != null)
-                        responseBytes = (byte[])responsedata["bin_response_data"];
-                    else
-                        responseString = (string)responsedata["str_response_string"];
-                    contentType = (string)responsedata["content_type"];
-                    if (responseString == null)
-                        responseString = String.Empty;
-                }
-                catch
+                if (responsedata["bin_response_data"] != null)
                 {
-                    responsecode = 500;
-                    responseString = "No response could be obtained";
-                    contentType = "text/plain";
-                    responsedata = new Hashtable();
+                    buffer = (byte[])responsedata["bin_response_data"];
+                    responsedata["bin_response_data"] = null;
+
+                    if (responsedata["bin_start"] != null)
+                        rangeStart = (int)responsedata["bin_start"];
+
+                    if (responsedata["int_bytes"] != null)
+                        rangeLen = (int)responsedata["int_bytes"];
                 }
+                else
+                    responseString = (string)responsedata["str_response_string"];
+
+                contentType = (string)responsedata["content_type"];
+                if (responseString == null)
+                    responseString = String.Empty;
+            }
+            catch
+            {
+                SendNoContentError(response);
+                return;
             }
 
             if (responsedata.ContainsKey("error_status_text"))
-            {
                 response.StatusDescription = (string)responsedata["error_status_text"];
-            }
+
             if (responsedata.ContainsKey("http_protocol_version"))
-            {
                 response.ProtocolVersion = (string)responsedata["http_protocol_version"];
-            }
 
             if (responsedata.ContainsKey("keepalive"))
-            {
-                bool keepalive = (bool)responsedata["keepalive"];
-                response.KeepAlive = keepalive;
-            }
+                response.KeepAlive = (bool)responsedata["keepalive"];
 
             // Cross-Origin Resource Sharing with simple requests
             if (responsedata.ContainsKey("access_control_allow_origin"))
                 response.AddHeader("Access-Control-Allow-Origin", (string)responsedata["access_control_allow_origin"]);
-
-            if (string.IsNullOrEmpty(contentType))
-            {
-                contentType = "text/html";
-            }
-
-            // The client ignores anything but 200 here for web login, so ensure that this is 200 for that
 
             response.StatusCode = responsecode;
 
@@ -184,7 +150,11 @@ namespace OpenSim.Framework.Servers.HttpServer
                 response.RedirectLocation = (string)responsedata["str_redirect_location"];
             }
 
-            response.AddHeader("Content-Type", contentType);
+            if (string.IsNullOrEmpty(contentType))
+                response.AddHeader("Content-Type", "text/html");
+            else
+                response.AddHeader("Content-Type", contentType);
+
             if (responsedata.ContainsKey("headers"))
             {
                 Hashtable headerdata = (Hashtable)responsedata["headers"];
@@ -193,13 +163,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                     response.AddHeader(header, headerdata[header].ToString());
             }
 
-            byte[] buffer;
-
-            if (responseBytes != null)
-            {
-                buffer = responseBytes;
-            }
-            else
+            if(buffer == null)
             {
                 if (!(contentType.Contains("image")
                     || contentType.Contains("x-shockwave-flash")
@@ -217,12 +181,64 @@ namespace OpenSim.Framework.Servers.HttpServer
                 response.ContentEncoding = Encoding.UTF8;
             }
 
-            return buffer;
+            if (rangeStart < 0 || rangeStart > buffer.Length)
+                rangeStart = 0;
+
+            if (rangeLen < 0)
+                rangeLen = buffer.Length;
+            else if (rangeLen + rangeStart > buffer.Length)
+                rangeLen = buffer.Length - rangeStart;
+
+            response.ContentLength64 = rangeLen;
+
+            try
+            {
+                if(rangeLen > 0)
+                {
+                    response.RawBufferStart = rangeStart;
+                    response.RawBufferLen = rangeLen;
+                    response.RawBuffer = buffer;
+                    //response.OutputStream.Write(buffer, rangeStart, rangeLen);
+                }
+
+                buffer = null;
+
+                response.Send();
+                response.RawBuffer = null;
+            }
+            catch (Exception ex)
+            {
+                if(ex is System.Net.Sockets.SocketException)
+                {
+                    // only mute connection reset by peer so we are not totally blind for now
+                    if(((System.Net.Sockets.SocketException)ex).SocketErrorCode != System.Net.Sockets.SocketError.ConnectionReset)
+                         m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
+                }
+                else
+                    m_log.Warn("[POLL SERVICE WORKER THREAD]: Error ", ex);
+            }
+
+            PollServiceArgs.RequestsHandled++;
         }
+
+        internal void SendNoContentError(OSHttpResponse response)
+        {
+            response.ContentLength64 = 0;
+            response.ContentEncoding = Encoding.UTF8;
+            response.StatusCode = 500;
+
+            try
+            {
+                response.Send();
+            }
+            catch { }
+            return;
+        }
+
         internal void DoHTTPstop()
         {
             OSHttpResponse response
-                = new OSHttpResponse(new HttpResponse(HttpContext, Request), HttpContext);
+                = new OSHttpResponse(new HttpResponse(HttpContext, Request));
 
             if(Request.Body.CanRead)
                 Request.Body.Dispose();
@@ -230,7 +246,6 @@ namespace OpenSim.Framework.Servers.HttpServer
             response.ContentLength64 = 0;
             response.ContentEncoding = Encoding.UTF8;
             response.KeepAlive = false;
-            response.SendChunked = false;
             response.StatusCode = 503;
 
             try
