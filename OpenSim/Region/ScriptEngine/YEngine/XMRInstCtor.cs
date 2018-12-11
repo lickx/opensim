@@ -188,7 +188,7 @@ namespace OpenSim.Region.ScriptEngine.Yengine
                 // Use the same object code for identical source code
                 // regardless of asset ID, so we don't care if they
                 // copy scripts or not.
-                byte[] scbytes = System.Text.Encoding.UTF8.GetBytes(m_SourceCode + migrationVersion.ToString());
+                byte[] scbytes = System.Text.Encoding.UTF8.GetBytes(m_SourceCode);
                 StringBuilder sb = new StringBuilder((256 + 5) / 6);
                 using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
                     ByteArrayToSixbitStr(sb, sha.ComputeHash(scbytes));
@@ -395,10 +395,13 @@ namespace OpenSim.Region.ScriptEngine.Yengine
                 }
                 catch
                 {
+                    File.Delete(m_StateFileName);
+
                     m_Running = true;                  // event processing is enabled
                     eventCode = ScriptEventCode.None;  // not processing any event
 
                     // default state_entry() must initialize global variables
+                    glblVars.AllocVarArrays(m_ObjCode.glblSizes); // reset globals
                     doGblInit = true;
                     stateCode = 0;
 
@@ -524,11 +527,6 @@ namespace OpenSim.Region.ScriptEngine.Yengine
             XmlElement doGblInitN = (XmlElement)scriptStateN.SelectSingleNode("DoGblInit");
             doGblInit = bool.Parse(doGblInitN.InnerText);
 
-            XmlElement permissionsN = (XmlElement)scriptStateN.SelectSingleNode("Permissions");
-            m_Item.PermsGranter = new UUID(permissionsN.GetAttribute("granter"));
-            m_Item.PermsMask = Convert.ToInt32(permissionsN.GetAttribute("mask"));
-            m_Part.Inventory.UpdateInventoryItem(m_Item, false, false);
-
             // get values used by stuff like llDetectedGrab, etc.
             DetectParams[] detParams = RestoreDetectParams(scriptStateN.SelectSingleNode("DetectArray"));
 
@@ -550,9 +548,14 @@ namespace OpenSim.Region.ScriptEngine.Yengine
                 MigrateInEventHandler(ms);
             }
 
+            XmlElement permissionsN = (XmlElement)scriptStateN.SelectSingleNode("Permissions");
+            m_Item.PermsGranter = new UUID(permissionsN.GetAttribute("granter"));
+            m_Item.PermsMask = Convert.ToInt32(permissionsN.GetAttribute("mask"));
+            m_Part.Inventory.UpdateInventoryItem(m_Item, false, false);
+
             // Restore event queues, preserving any events that queued
             // whilst we were restoring the state
-            lock(m_QueueLock)
+            lock (m_QueueLock)
             {
                 m_DetectParams = detParams;
                 foreach(EventParams evt in m_EventQueue)
