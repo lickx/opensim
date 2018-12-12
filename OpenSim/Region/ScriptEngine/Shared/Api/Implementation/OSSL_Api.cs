@@ -3165,6 +3165,37 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             }
         }
 
+        public void osNpcSayTo(LSL_Key npc, LSL_Key target, int channel, string msg)
+        {
+            CheckThreatLevel(ThreatLevel.High, "osNpcSayTo");
+
+            INPCModule module = World.RequestModuleInterface<INPCModule>();
+            if (module == null)
+                return;
+
+            UUID npcId;
+            if (!UUID.TryParse(npc.m_string, out npcId))
+                return;
+
+            UUID TargetID;
+            if (!UUID.TryParse(target.m_string, out TargetID))
+                return;
+
+            if (!module.CheckPermissions(npcId, m_host.OwnerID))
+                return;
+
+            ScenePresence NPCpresence = World.GetScenePresence(npcId);
+            if (NPCpresence == null || NPCpresence.IsDeleted || !NPCpresence.IsNPC)
+                return;
+
+            Vector3 npcPOS = NPCpresence.AbsolutePosition;
+            string npcNAME = NPCpresence.Name;
+
+            IWorldComm wComm = m_ScriptEngine.World.RequestModuleInterface<IWorldComm>();
+            if (wComm != null)
+                wComm.DeliverMessageTo(TargetID, channel, npcPOS, npcNAME, npcId, msg);
+        }
+
         public void osNpcShout(LSL_Key npc, int channel, string message)
         {
             CheckThreatLevel(ThreatLevel.High, "osNpcShout");
@@ -4251,7 +4282,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         /// <returns></returns>
         public void osSetContentType(LSL_Key id, string type)
         {
-            CheckThreatLevel(ThreatLevel.High, "osSetContentType");
+            CheckThreatLevel(ThreatLevel.Severe, "osSetContentType");
 
             if (m_UrlModule != null)
                 m_UrlModule.HttpContentType(new UUID(id),type);

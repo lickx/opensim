@@ -683,6 +683,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_OSSL_Functions.osNpcSay(npc, channel, message);
         }
 
+        public void osNpcSayTo(LSL_Key npc, LSL_Key target, int channel, string msg)
+        {
+            m_OSSL_Functions.osNpcSayTo(npc, target, channel, msg);
+        }
 
         public void osNpcShout(key npc, int channel, string message)
         {
