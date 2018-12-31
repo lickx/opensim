@@ -353,7 +353,7 @@ namespace OpenSim.Data.PGSQL
             ""PhysicsShapeType"" = :PhysicsShapeType, ""Density"" = :Density, ""GravityModifier"" = :GravityModifier, ""Friction"" = :Friction, ""Restitution"" = :Restitution, 
             ""PassCollisions"" = :PassCollisions, ""RotationAxisLocks"" = :RotationAxisLocks, ""RezzerID"" = :RezzerID,
             ""ClickAction"" = :ClickAction, ""Material"" = :Material, ""CollisionSound"" = :CollisionSound, ""CollisionSoundVolume"" = :CollisionSoundVolume, ""PassTouches"" = :PassTouches,
-            ""LinkNumber"" = :LinkNumber, ""MediaURL"" = :MediaURL, ""DynAttrs"" = :DynAttrs,
+            ""LinkNumber"" = :LinkNumber, ""MediaURL"" = :MediaURL, ""DynAttrs"" = :DynAttrs, ""Vehicle"" = :Vehicle,
             ""PhysInertia"" = :PhysInertia
         WHERE ""UUID"" = :UUID ;
 
@@ -368,7 +368,7 @@ namespace OpenSim.Data.PGSQL
             ""OmegaY"", ""OmegaZ"", ""CameraEyeOffsetX"", ""CameraEyeOffsetY"", ""CameraEyeOffsetZ"", ""CameraAtOffsetX"", ""CameraAtOffsetY"", ""CameraAtOffsetZ"",
             ""ForceMouselook"", ""ScriptAccessPin"", ""AllowedDrop"", ""DieAtEdge"", ""SalePrice"", ""SaleType"", ""ColorR"", ""ColorG"", ""ColorB"", ""ColorA"",
             ""ParticleSystem"", ""ClickAction"", ""Material"", ""CollisionSound"", ""CollisionSoundVolume"", ""PassTouches"", ""LinkNumber"", ""MediaURL"", ""DynAttrs"",
-            ""PhysicsShapeType"", ""Density"", ""GravityModifier"", ""Friction"", ""Restitution"", ""PassCollisions"", ""RotationAxisLocks"", ""RezzerID"" , ""PhysInertia""
+            ""PhysicsShapeType"", ""Density"", ""GravityModifier"", ""Friction"", ""Restitution"", ""PassCollisions"", ""RotationAxisLocks"", ""RezzerID"" , ""Vehicle"", ""PhysInertia""
             ) Select
             :UUID, :CreationDate, :Name, :Text, :Description, :SitName, :TouchName, :ObjectFlags, :OwnerMask, :NextOwnerMask, :GroupMask,
             :EveryoneMask, :BaseMask, :PositionX, :PositionY, :PositionZ, :GroupPositionX, :GroupPositionY, :GroupPositionZ, :VelocityX,
@@ -379,7 +379,7 @@ namespace OpenSim.Data.PGSQL
             :OmegaY, :OmegaZ, :CameraEyeOffsetX, :CameraEyeOffsetY, :CameraEyeOffsetZ, :CameraAtOffsetX, :CameraAtOffsetY, :CameraAtOffsetZ,
             :ForceMouselook, :ScriptAccessPin, :AllowedDrop, :DieAtEdge, :SalePrice, :SaleType, :ColorR, :ColorG, :ColorB, :ColorA,
             :ParticleSystem, :ClickAction, :Material, :CollisionSound, :CollisionSoundVolume, :PassTouches, :LinkNumber, :MediaURL, :DynAttrs,
-            :PhysicsShapeType, :Density, :GravityModifier, :Friction, :Restitution, :PassCollisions, :RotationAxisLocks, :RezzerID, :PhysInertia
+            :PhysicsShapeType, :Density, :GravityModifier, :Friction, :Restitution, :PassCollisions, :RotationAxisLocks, :RezzerID, :Vehicle, :PhysInertia
             where not EXISTS (SELECT ""UUID"" FROM prims WHERE ""UUID"" = :UUID);
         ";
 
@@ -1805,8 +1805,15 @@ namespace OpenSim.Data.PGSQL
             prim.Friction = Convert.ToSingle(primRow["Friction"]);
             prim.Restitution = Convert.ToSingle(primRow["Restitution"]);
             prim.RotationAxisLocks = Convert.ToByte(primRow["RotationAxisLocks"]);
-            
-            
+
+            SOPVehicle vehicle = null;
+            if (!(primRow["Vehicle"] is System.DBNull))
+            {
+                vehicle = SOPVehicle.FromXml2(primRow["Vehicle"].ToString());
+                if (vehicle != null)
+                    prim.VehicleParams = vehicle;
+            }
+
             PhysicsInertiaData pdata = null;
             if (!(primRow["PhysInertia"] is System.DBNull))
                 pdata = PhysicsInertiaData.FromXml2(primRow["PhysInertia"].ToString());
@@ -2214,8 +2221,7 @@ namespace OpenSim.Data.PGSQL
 
             parameters.Add(_Database.CreateParameter("PassTouches", (bool)prim.PassTouches));
             parameters.Add(_Database.CreateParameter("PassCollisions", (bool)prim.PassCollisions));
-            
-            
+
             if (prim.PassTouches)
                 parameters.Add(_Database.CreateParameter("PassTouches", true));
             else
@@ -2228,12 +2234,16 @@ namespace OpenSim.Data.PGSQL
 
             parameters.Add(_Database.CreateParameter("LinkNumber", prim.LinkNum));
             parameters.Add(_Database.CreateParameter("MediaURL", prim.MediaUrl));
-            
+
+            if (prim.VehicleParams != null)
+                parameters.Add(_Database.CreateParameter("Vehicle", prim.VehicleParams.ToXml2()));
+            else
+                parameters.Add(_Database.CreateParameter("Vehicle", String.Empty));
+
             if (prim.PhysicsInertia != null)
                 parameters.Add(_Database.CreateParameter("PhysInertia", prim.PhysicsInertia.ToXml2()));
             else
                 parameters.Add(_Database.CreateParameter("PhysInertia", String.Empty));
-
 
             if (prim.DynAttrs.CountNamespaces > 0)
                 parameters.Add(_Database.CreateParameter("DynAttrs", prim.DynAttrs.ToXml()));

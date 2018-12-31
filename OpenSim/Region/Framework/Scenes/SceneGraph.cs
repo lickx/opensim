@@ -28,6 +28,7 @@
 using System;
 using System.Threading;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Reflection;
 using OpenMetaverse;
 using OpenMetaverse.Packets;
@@ -68,8 +69,10 @@ namespace OpenSim.Region.Framework.Scenes
 
         #region Fields
 
-        protected OpenMetaverse.ReaderWriterLockSlim m_scenePresencesLock = new OpenMetaverse.ReaderWriterLockSlim();
-        protected Dictionary<UUID, ScenePresence> m_scenePresenceMap = new Dictionary<UUID, ScenePresence>();
+        protected System.Threading.ReaderWriterLockSlim m_scenePresencesLock = new System.Threading.ReaderWriterLockSlim();
+
+        protected ConcurrentDictionary<UUID, ScenePresence> m_scenePresenceMap = new ConcurrentDictionary<UUID, ScenePresence>();
+        protected ConcurrentDictionary<uint, ScenePresence> m_scenePresenceLocalIDMap = new ConcurrentDictionary<uint, ScenePresence>();
         protected List<ScenePresence> m_scenePresenceArray = new List<ScenePresence>();
 
         protected internal EntityManager Entities = new EntityManager();
@@ -147,10 +150,9 @@ namespace OpenSim.Region.Framework.Scenes
             m_scenePresencesLock.EnterWriteLock();
             try
             {
-                Dictionary<UUID, ScenePresence> newmap = new Dictionary<UUID, ScenePresence>();
-                List<ScenePresence> newlist = new List<ScenePresence>();
-                m_scenePresenceMap = newmap;
-                m_scenePresenceArray = newlist;
+                m_scenePresenceMap = new ConcurrentDictionary<UUID, ScenePresence>();
+                m_scenePresenceLocalIDMap = new ConcurrentDictionary<uint, ScenePresence>();
+                m_scenePresenceArray = new List<ScenePresence>();
             }
             finally
             {
@@ -165,22 +167,13 @@ namespace OpenSim.Region.Framework.Scenes
                 SceneObjectGroupsByLocalPartID.Clear();
 
             Entities.Clear();
+            m_scenePresencesLock.Dispose();
         }
 
         #region Update Methods
 
         protected internal void UpdatePreparePhysics()
         {
-            // If we are using a threaded physics engine
-            // grab the latest scene from the engine before
-            // trying to process it.
-
-            // PhysX does this (runs in the background).
-
-            if (PhysicsScene.IsThreaded)
-            {
-                PhysicsScene.GetResults();
-            }
         }
 
         /// <summary>
@@ -197,6 +190,14 @@ namespace OpenSim.Region.Framework.Scenes
             });
         }
 
+        protected internal void UpdateScenePresenceMovement()
+        {
+            ForEachScenePresence(delegate (ScenePresence presence)
+            {
+                presence.UpdateMovement();
+            });
+        }
+
         /// <summary>
         /// Perform a physics frame update.
         /// </summary>
@@ -204,37 +205,15 @@ namespace OpenSim.Region.Framework.Scenes
         /// <returns></returns>
         protected internal float UpdatePhysics(double elapsed)
         {
-            // Here is where the Scene calls the PhysicsScene. This is a one-way
-            // interaction; the PhysicsScene cannot access the calling Scene directly.
-            // But with joints, we want a PhysicsActor to be able to influence a
-            // non-physics SceneObjectPart. In particular, a PhysicsActor that is connected
-            // with a joint should be able to move the SceneObjectPart which is the visual
-            // representation of that joint (for editing and serialization purposes).
-            // However the PhysicsActor normally cannot directly influence anything outside
-            // of the PhysicsScene, and the non-physical SceneObjectPart which represents
-            // the joint in the Scene does not exist in the PhysicsScene.
-            //
-            // To solve this, we have an event in the PhysicsScene that is fired when a joint
-            // has changed position (because one of its associated PhysicsActors has changed
-            // position).
-            //
-            // Therefore, JointMoved and JointDeactivated events will be fired as a result of the following Simulate().
-
-            return PhysicsScene.Simulate((float)elapsed);
+            if (PhysicsScene != null)
+                return PhysicsScene.Simulate((float)elapsed);
+            return 0;
         }
 
         protected internal void ProcessPhysicsPreSimulation()
         {
             if(PhysicsScene != null)
                 PhysicsScene.ProcessPreSimulation();
-        }
-
-        protected internal void UpdateScenePresenceMovement()
-        {
-            ForEachScenePresence(delegate(ScenePresence presence)
-            {
-                presence.UpdateMovement();
-            });
         }
 
         public void GetCoarseLocations(out List<Vector3> coarseLocations, out List<UUID> avatarUUIDs, uint maxLocations)
@@ -506,7 +485,7 @@ namespace OpenSim.Region.Framework.Scenes
             }
 
             if (sendClientUpdates)
-                sceneObject.ScheduleGroupForFullUpdate();
+                sceneObject.ScheduleGroupForFullAnimUpdate();
 
             if (attachToBackup)
                 sceneObject.AttachToBackup();
@@ -640,13 +619,15 @@ namespace OpenSim.Region.Framework.Scenes
                 lock (m_updateList)
                 {
                     updates = new List<SceneObjectGroup>(m_updateList.Values);
-                    m_updateList.Clear();
+                    m_updateList = new Dictionary<UUID, SceneObjectGroup>();
                 }
 
                 // Go through all updates
                 for (int i = 0; i < updates.Count; i++)
                 {
                     SceneObjectGroup sog = updates[i];
+                    if (sog.IsDeleted)
+                        continue;
 
                     // Don't abort the whole update if one entity happens to give us an exception.
                     try
@@ -720,26 +701,32 @@ namespace OpenSim.Region.Framework.Scenes
             {
                 m_numChildAgents++;
 
-                Dictionary<UUID, ScenePresence> newmap = new Dictionary<UUID, ScenePresence>(m_scenePresenceMap);
                 List<ScenePresence> newlist = new List<ScenePresence>(m_scenePresenceArray);
 
-                if (!newmap.ContainsKey(presence.UUID))
+                if (!m_scenePresenceMap.ContainsKey(presence.UUID))
                 {
-                    newmap.Add(presence.UUID, presence);
+                    m_scenePresenceMap[presence.UUID] = presence;
+                    m_scenePresenceLocalIDMap[presence.LocalId] = presence;
                     newlist.Add(presence);
                 }
                 else
                 {
                     // Remember the old presence reference from the dictionary
-                    ScenePresence oldref = newmap[presence.UUID];
+                    ScenePresence oldref = m_scenePresenceMap[presence.UUID];
+                    uint oldLocalID = oldref.LocalId;
                     // Replace the presence reference in the dictionary with the new value
-                    newmap[presence.UUID] = presence;
-                    // Find the index in the list where the old ref was stored and update the reference
+                    m_scenePresenceMap[presence.UUID] = presence;
                     newlist[newlist.IndexOf(oldref)] = presence;
+
+                    if(presence.LocalId != oldLocalID)
+                    {
+                        m_scenePresenceLocalIDMap.TryRemove(oldLocalID, out oldref);
+                        m_scenePresenceLocalIDMap[presence.LocalId] = presence;
+                    }
+                    // Find the index in the list where the old ref was stored and update the reference
                 }
 
                 // Swap out the dictionary and list with new references
-                m_scenePresenceMap = newmap;
                 m_scenePresenceArray = newlist;
             }
             finally
@@ -765,20 +752,15 @@ namespace OpenSim.Region.Framework.Scenes
             m_scenePresencesLock.EnterWriteLock();
             try
             {
-                Dictionary<UUID, ScenePresence> newmap = new Dictionary<UUID, ScenePresence>(m_scenePresenceMap);
-                List<ScenePresence> newlist = new List<ScenePresence>(m_scenePresenceArray);
-
                 // Remove the presence reference from the dictionary
-                if (newmap.ContainsKey(agentID))
+                ScenePresence oldref;
+                if(m_scenePresenceMap.TryRemove(agentID, out oldref))
                 {
-                    ScenePresence oldref = newmap[agentID];
-                    newmap.Remove(agentID);
-
                     // Find the index in the list where the old ref was stored and remove the reference
-                    newlist.RemoveAt(newlist.IndexOf(oldref));
-                    // Swap out the dictionary and list with new references
-                    m_scenePresenceMap = newmap;
-                    m_scenePresenceArray = newlist;
+                    List<ScenePresence> newsps = new List<ScenePresence>(m_scenePresenceArray);
+                    newsps.RemoveAt(newsps.IndexOf(oldref));
+                    m_scenePresenceArray = newsps;
+                    m_scenePresenceLocalIDMap.TryRemove(oldref.LocalId, out oldref);
                 }
                 else
                 {
@@ -914,7 +896,16 @@ namespace OpenSim.Region.Framework.Scenes
         /// <returns></returns>
         protected internal List<ScenePresence> GetScenePresences()
         {
-            return m_scenePresenceArray;
+
+            m_scenePresencesLock.EnterReadLock();
+            try
+            {
+                return m_scenePresenceArray;
+            }
+            finally
+            {
+                m_scenePresencesLock.ExitReadLock();
+            }
         }
 
         /// <summary>
@@ -924,9 +915,8 @@ namespace OpenSim.Region.Framework.Scenes
         /// <returns>null if the presence was not found</returns>
         protected internal ScenePresence GetScenePresence(UUID agentID)
         {
-            Dictionary<UUID, ScenePresence> presences = m_scenePresenceMap;
             ScenePresence presence;
-            presences.TryGetValue(agentID, out presence);
+            m_scenePresenceMap.TryGetValue(agentID, out presence);
             return presence;
         }
 
@@ -955,24 +945,28 @@ namespace OpenSim.Region.Framework.Scenes
         /// <returns>null if the presence was not found</returns>
         protected internal ScenePresence GetScenePresence(uint localID)
         {
+            ScenePresence sp = null;
+            if(m_scenePresenceLocalIDMap.TryGetValue(localID, out sp))
+                return sp;
+/*
             List<ScenePresence> presences = GetScenePresences();
             foreach (ScenePresence presence in presences)
                 if (presence.LocalId == localID)
                     return presence;
+*/
             return null;
         }
 
         protected internal bool TryGetScenePresence(UUID agentID, out ScenePresence avatar)
         {
-            Dictionary<UUID, ScenePresence> presences = m_scenePresenceMap;
-            presences.TryGetValue(agentID, out avatar);
-            return (avatar != null);
+            return m_scenePresenceMap.TryGetValue(agentID, out avatar);
         }
 
         protected internal bool TryGetAvatarByName(string name, out ScenePresence avatar)
         {
             avatar = null;
-            foreach (ScenePresence presence in GetScenePresences())
+            List<ScenePresence> presences = GetScenePresences();
+            foreach (ScenePresence presence in presences)
             {
                 if (String.Compare(name, presence.ControllingClient.Name, true) == 0)
                 {
@@ -1831,7 +1825,6 @@ namespace OpenSim.Region.Framework.Scenes
 
             try
             {
-
                 List<SceneObjectGroup> childGroups = new List<SceneObjectGroup>();
 
                 // We do this in reverse to get the link order of the prims correct
@@ -1876,8 +1869,6 @@ namespace OpenSim.Region.Framework.Scenes
                 {
                     parentGroup.RootPart.CreateSelected = true;
                     parentGroup.TriggerScriptChangedEvent(Changed.LINK);
-                    parentGroup.HasGroupChanged = true;
-                    parentGroup.ScheduleGroupForFullUpdate();
                 }
             }
             finally
@@ -1892,7 +1883,7 @@ namespace OpenSim.Region.Framework.Scenes
                 parentGroup.AdjustChildPrimPermissions(false);
                 parentGroup.HasGroupChanged = true;
                 parentGroup.ProcessBackup(m_parentScene.SimulationDataService, true);
-                parentGroup.ScheduleGroupForFullUpdate();
+                parentGroup.ScheduleGroupForFullAnimUpdate();
                 Monitor.Exit(m_updateLock);
             }
         }
@@ -1955,7 +1946,7 @@ namespace OpenSim.Region.Framework.Scenes
                         child.ParentGroup.DelinkFromGroup(child, true);
                         //child.ParentGroup is now other
                         child.ParentGroup.HasGroupChanged = true;
-                        child.ParentGroup.ScheduleGroupForFullUpdate();
+                        child.ParentGroup.ScheduleGroupForFullAnimUpdate();
                     }
                 }
 
@@ -1997,7 +1988,7 @@ namespace OpenSim.Region.Framework.Scenes
                         newRoot.TriggerScriptChangedEvent(Changed.LINK);
                         newRoot.ParentGroup.HasGroupChanged = true;
                         newRoot.ParentGroup.InvalidatePartsLinkMaps();
-                        newRoot.ParentGroup.ScheduleGroupForFullUpdate();
+                        newRoot.ParentGroup.ScheduleGroupForFullAnimUpdate();
                     }
                 }
 
@@ -2137,7 +2128,7 @@ namespace OpenSim.Region.Framework.Scenes
                     copy.ResumeScripts();
 
                     copy.HasGroupChanged = true;
-                    copy.ScheduleGroupForFullUpdate();
+                    copy.ScheduleGroupForFullAnimUpdate();
                     return copy;
                 }
             }

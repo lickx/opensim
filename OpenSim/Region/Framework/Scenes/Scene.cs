@@ -62,8 +62,8 @@ namespace OpenSim.Region.Framework.Scenes
         private const long DEFAULT_MIN_TIME_FOR_PERSISTENCE = 60L;
         private const long DEFAULT_MAX_TIME_FOR_PERSISTENCE = 600L;
 
-
         public delegate void SynchronizeSceneHandler(Scene scene);
+
 
         #region Fields
 
@@ -945,6 +945,7 @@ namespace OpenSim.Region.Framework.Scenes
 
                 PhysicalPrims = startupConfig.GetBoolean("physical_prim", true);
                 CollidablePrims = startupConfig.GetBoolean("collidable_prim", true);
+
                 m_minNonphys = startupConfig.GetFloat("NonPhysicalPrimMin", m_minNonphys);
                 if (RegionInfo.NonphysPrimMin > 0)
                 {
@@ -1547,10 +1548,9 @@ namespace OpenSim.Region.Framework.Scenes
             // tell physics to finish building actor
             m_sceneGraph.ProcessPhysicsPreSimulation();
 
-            m_heartbeatThread
-                = WorkManager.StartThread(
-                    Heartbeat, string.Format("Heartbeat-({0})", RegionInfo.RegionName.Replace(" ", "_")), ThreadPriority.Normal, false, false);
-
+            m_heartbeatThread = WorkManager.StartThread(
+                Heartbeat, string.Format("Heartbeat-({0})", RegionInfo.RegionName.Replace(" ", "_")), ThreadPriority.Normal, false,
+                false, null, 20000, false);
             StartScripts();
         }
 
@@ -1943,7 +1943,7 @@ namespace OpenSim.Region.Framework.Scenes
         {
             if (!m_backingup)
             {
-                WorkManager.RunInThreadPool(o => Backup(false), null, string.Format("BackupWorker ({0}", Name), false);
+                WorkManager.RunInThreadPool(o => Backup(false), null, string.Format("BackupWorker ({0})", Name), false);
             }
         }
 
@@ -2537,7 +2537,7 @@ namespace OpenSim.Region.Framework.Scenes
                 sceneObject.RootPart.CreatorIdentification = UserManagementModule.GetUserUUI(ownerID);
 
             sceneObject.InvalidateDeepEffectivePerms();;
-            sceneObject.ScheduleGroupForFullUpdate();
+            sceneObject.ScheduleGroupForFullAnimUpdate();
 
             return sceneObject;
         }
