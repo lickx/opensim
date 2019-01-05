@@ -1214,10 +1214,14 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
             m_entityTransferStateMachine.UpdateInTransit(sp.UUID, AgentTransferState.CleaningUp);
 
-            if(logout)
+            /* now some viewers also need time bf closing child regions
+             * so this is moved down and delay added
+
+            if (logout)
                 sp.closeAllChildAgents();
             else
                 sp.CloseChildAgents(childRegionsToClose);
+            */
 
             sp.HasMovedAway(!(OutSideViewRange || logout));
 
@@ -1229,28 +1233,27 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             // Now let's make it officially a child agent
             sp.MakeChildAgent(destinationHandle);
 
+            Thread.Sleep(2000);
+
+            if (logout)
+                sp.closeAllChildAgents();
+            else
+                sp.CloseChildAgents(childRegionsToClose);
+
             // Finally, let's close this previously-known-as-root agent, when the jump is outside the view zone
-            // go by HG hook
+            // goes by HG hook
             if (NeedsClosing(reg, OutSideViewRange))
             {
                 if (!sp.Scene.IncomingPreCloseClient(sp))
+                {
+                    sp.IsInTransit = false;
                     return;
+                }
 
-                // RED ALERT!!!!
-                // PLEASE DO NOT DECREASE THIS WAIT TIME UNDER ANY CIRCUMSTANCES.
-                // THE VIEWERS SEEM TO NEED SOME TIME AFTER RECEIVING MoveAgentIntoRegion
-                // BEFORE THEY SETTLE IN THE NEW REGION.
-                // DECREASING THE WAIT TIME HERE WILL EITHER RESULT IN A VIEWER CRASH OR
-                // IN THE AVIE BEING PLACED IN INFINITY FOR A COUPLE OF SECONDS.
-
-                Thread.Sleep(15000);
-
-                // OK, it got this agent. Let's close everything
-                // If we shouldn't close the agent due to some other region renewing the connection
-                // then this will be handled in IncomingCloseAgent under lock conditions
+                // viewers and target region take extra time to process the tp
+//                Thread.Sleep(2000);
                 m_log.DebugFormat(
-                    "[ENTITY TRANSFER MODULE]: Closing agent {0} in {1} after teleport", sp.Name, Scene.Name);
-
+                            "[ENTITY TRANSFER MODULE]: Closing agent {0} in {1} after teleport", sp.Name, Scene.Name);
                 sp.Scene.CloseAgent(sp.UUID, false);
             }
             sp.IsInTransit = false;
@@ -2138,7 +2141,7 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             sp.KnownRegions = seeds;
             sp.SetNeighbourRegionSizeInfo(neighbours);
 
-            if(newneighbours.Count > 0 || previousRegionNeighbourHandles.Count > 0)
+            if(neighbours.Count > 0)
             {
                 AgentPosition agentpos = new AgentPosition();
                 agentpos.AgentID = new UUID(sp.UUID.Guid);

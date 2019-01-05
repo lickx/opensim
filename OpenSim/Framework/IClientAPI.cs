@@ -609,7 +609,9 @@ namespace OpenSim.Framework
             // we are on the new one
             PrimUpdateFlags updateFlags = oldupdate.Flags;
             if(m_flags.HasFlag(PrimUpdateFlags.CancelKill))
-                m_flags = PrimUpdateFlags.FullUpdate;
+            {
+                m_flags = PrimUpdateFlags.FullUpdatewithAnim;
+            }
             else if(updateFlags.HasFlag(PrimUpdateFlags.Kill))
                 return;
             else // kill case will just merge in
@@ -710,7 +712,6 @@ namespace OpenSim.Framework
         Vector3 StartPos { get; set; }
 
         UUID AgentId { get; }
-        bool SupportObjectAnimations { get; set; }
 
         /// <summary>
         /// The scene agent for this client.  This will only be set if the client has an agent in a scene (i.e. if it
@@ -1515,5 +1516,6 @@ namespace OpenSim.Framework
         void SendAgentTerseUpdate(ISceneEntity presence);
 
         void SendPlacesReply(UUID queryID, UUID transactionID, PlacesReplyData[] data);
+        void CheckViewerCaps();
     }
 }

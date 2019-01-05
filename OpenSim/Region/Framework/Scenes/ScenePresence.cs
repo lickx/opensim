@@ -45,7 +45,6 @@ using OpenSim.Region.PhysicsModules.SharedBase;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 using OpenSim.Services.Interfaces;
 using TeleportFlags = OpenSim.Framework.Constants.TeleportFlags;
-using Caps = OpenSim.Framework.Capabilities.Caps;
 
 namespace OpenSim.Region.Framework.Scenes
 {
@@ -1111,14 +1110,6 @@ namespace OpenSim.Region.Framework.Scenes
 
             HealRate = 0.5f;
 
-            ControllingClient.SupportObjectAnimations = false;
-            if (m_scene.CapsModule != null)
-            {
-                Caps cap = m_scene.CapsModule.GetCapsForUser(ControllingClient.CircuitCode);
-                if (cap != null && (cap.Flags & Caps.CapsFlags.ObjectAnim) != 0)
-                    ControllingClient.SupportObjectAnimations = true;
-            }
-
             IConfig sconfig = m_scene.Config.Configs["EntityTransfer"];
             if (sconfig != null)
             {
@@ -1142,7 +1133,6 @@ namespace OpenSim.Region.Framework.Scenes
             }
             m_bandwidthBurst = m_bandwidth / 5;
             ControllingClient.RefreshGroupMembership();
-
         }
 
         private float lastHealthSent = 0;
@@ -1261,8 +1251,9 @@ namespace OpenSim.Region.Framework.Scenes
         /// </remarks>
 
         // constants for physics position search
-        const float PhysSearchHeight = 600f;
-        const float PhysMinSkipGap = 50f;
+        const float PhysSearchHeight = 300f;
+        const float PhysMinSkipGap = 20f;
+        const float PhysSkipGapDelta = 30f;
         const int PhysNumberCollisions = 30;
 
         // only in use as part of completemovement
@@ -1408,11 +1399,13 @@ namespace OpenSim.Region.Framework.Scenes
 
                     List<ContactResult> physresults =
                             (List<ContactResult>)m_scene.RayCastFiltered(RayStart, direction, dist, physcount, rayfilter);
-                    if (physresults != null && physresults.Count > 0)
+                    while (physresults != null && physresults.Count > 0)
                     {
                         float dest = physresults[0].Pos.Z;
+                        if (dest - groundHeight > PhysMinSkipGap + PhysSkipGapDelta)
+                            break;
 
-                        if(physresults.Count > 1)
+                        if (physresults.Count > 1)
                         {
                             physresults.Sort(delegate(ContactResult a, ContactResult b)
                             {
@@ -1430,7 +1423,7 @@ namespace OpenSim.Region.Framework.Scenes
                                 if(curd >= nextd)
                                 {
                                     sel = i;
-                                    if(curd >= maxDepth)
+                                    if(curd >= maxDepth || curd >= nextd + PhysSkipGapDelta)
                                         break;
                                 }
                                 nextd = curd + PhysMinSkipGap;
@@ -1438,9 +1431,10 @@ namespace OpenSim.Region.Framework.Scenes
                             dest = physresults[sel].Pos.Z;
                         }
 
-                        dest += localAVHalfHeight;
-                        if(dest > pos.Z)
-                            pos.Z = dest;
+                    dest += localAVHalfHeight;
+                    if(dest > pos.Z)
+                        pos.Z = dest;
+                    break;
                     }
                 }
 
@@ -2344,11 +2338,12 @@ namespace OpenSim.Region.Framework.Scenes
                             m_agentTransfer.EnableChildAgents(this);
                         }
                     }
-                    // let updates be sent,  with some delay
+
                     m_lastChildUpdatesTime = Util.EnvironmentTickCount() + 10000;
-                    m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
-                    m_lastChildAgentUpdateDrawDistance = DrawDistance;
                     m_lastChildAgentUpdatePosition = AbsolutePosition;
+                    m_lastChildAgentUpdateDrawDistance = DrawDistance;
+
+                    m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
                     m_childUpdatesBusy = false; // allow them
                 }
 
@@ -4033,6 +4028,15 @@ namespace OpenSim.Region.Framework.Scenes
                     {
                         landch.sendClientInitialLandInfo(ControllingClient);
                     }
+                    m_reprioritizationLastPosition = AbsolutePosition;
+                    m_reprioritizationLastDrawDistance = DrawDistance;
+                    m_reprioritizationLastTime = Util.EnvironmentTickCount() + 15000; // delay it
+                }
+                else
+                {
+                    m_reprioritizationLastPosition = AbsolutePosition;
+                    m_reprioritizationLastDrawDistance = -1000;
+                    m_reprioritizationLastTime = Util.EnvironmentTickCount() + 2000; // delay it
                 }
 
                 SendOtherAgentsAvatarFullToMe();
@@ -4043,9 +4047,6 @@ namespace OpenSim.Region.Framework.Scenes
                         ((SceneObjectGroup)e).SendFullAnimUpdateToClient(ControllingClient);
                 }
 
-                m_reprioritizationLastPosition = AbsolutePosition;
-                m_reprioritizationLastDrawDistance = DrawDistance;
-                m_reprioritizationLastTime = Util.EnvironmentTickCount() + 15000; // delay it
                 m_reprioritizationBusy = false;
 
             });
@@ -4327,10 +4328,7 @@ namespace OpenSim.Region.Framework.Scenes
                 return;
 
             //possible KnownRegionHandles always contains current region and this check is not needed
-            int minhandles = 0;
-            if(KnownRegionHandles.Contains(RegionHandle))
-                    minhandles++;
-
+            int minhandles = KnownRegionHandles.Contains(RegionHandle) ? 1 : 0;
             if(KnownRegionHandles.Count > minhandles)
             {
                 int tdiff = Util.EnvironmentTickCountSubtract(m_lastChildUpdatesTime);
