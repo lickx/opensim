@@ -38,12 +38,13 @@ using OpenSim.Services.Connectors.Hypergrid;
 using OpenSim.Services.Interfaces;
 using OpenSim.Server.Base;
 
-using GridRegion = OpenSim.Services.Interfaces.GridRegion;
-
 using OpenMetaverse;
 using log4net;
 using Nini.Config;
 using Mono.Addins;
+
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
+
 
 namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 {
@@ -436,35 +437,84 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
         public override bool TeleportHome(UUID id, IClientAPI client)
         {
-            m_log.DebugFormat(
-                "[ENTITY TRANSFER MODULE]: Request to teleport {0} {1} home", client.Name, client.AgentId);
-
             // Let's find out if this is a foreign user or a local user
             IUserManagement uMan = Scene.RequestModuleInterface<IUserManagement>();
             if (uMan != null && uMan.IsLocalGridUser(id))
             {
                 // local grid user
-                m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: User is local");
                 return base.TeleportHome(id, client);
+            }
+
+            bool notsame = false;
+            if (client == null)
+            {
+                m_log.DebugFormat(
+                    "[HG ENTITY TRANSFER MODULE]: Request to teleport {0} home", id);
+            }
+            else
+            {
+                if (id == client.AgentId)
+                {
+                    m_log.DebugFormat(
+                        "[HG ENTITY TRANSFER MODULE]: Request to teleport {0} {1} home", client.Name, id);
+                }
+                else
+                {
+                    notsame = true;
+                    m_log.DebugFormat(
+                        "[HG ENTITY TRANSFER MODULE]: Request to teleport {0} home by {1} {2}", id, client.Name, client.AgentId);
+                }
+            }
+
+            ScenePresence sp = ((Scene)(client.Scene)).GetScenePresence(id);
+            if (sp == null || sp.IsDeleted || sp.IsChildAgent || sp.ControllingClient == null || !sp.ControllingClient.IsActive)
+            {
+                if (notsame)
+                    client.SendAlertMessage("TeleportHome: Agent not found in the scene");
+                m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: Agent not found in the scene");
+                return false;
+            }
+
+            IClientAPI targetClient = sp.ControllingClient;
+
+            if (sp.IsInTransit)
+            {
+                if (notsame)
+                    client.SendAlertMessage("TeleportHome: Agent already processing a teleport");
+                targetClient.SendTeleportFailed("Already processing a teleport");
+                m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: Agent still in teleport");
+                return false;
             }
 
             // Foreign user wants to go home
             //
-            AgentCircuitData aCircuit = ((Scene)(client.Scene)).AuthenticateHandler.GetAgentCircuitData(client.CircuitCode);
-            if (aCircuit == null || (aCircuit != null && !aCircuit.ServiceURLs.ContainsKey("HomeURI")))
+            AgentCircuitData aCircuit = sp.Scene.AuthenticateHandler.GetAgentCircuitData(targetClient.CircuitCode);
+            if (aCircuit == null)
             {
-                client.SendTeleportFailed("Your information has been lost");
+                if (notsame)
+                    client.SendAlertMessage("TeleportHome: Agent information not found");
+                targetClient.SendTeleportFailed("Home information not found");
                 m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: Unable to locate agent's gateway information");
                 return false;
             }
+            if (!aCircuit.ServiceURLs.ContainsKey("HomeURI"))
+            {
+                if (notsame)
+                    client.SendAlertMessage("TeleportHome: Agent home not set");
+                targetClient.SendTeleportFailed("Home not set");
+                m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: Agent home not set");
+                return false;
+            }
 
-            IUserAgentService userAgentService = new UserAgentServiceConnector(aCircuit.ServiceURLs["HomeURI"].ToString());
+            string homeURI = aCircuit.ServiceURLs["HomeURI"].ToString();
+
+            IUserAgentService userAgentService = new UserAgentServiceConnector(homeURI);
             Vector3 position = Vector3.UnitY, lookAt = Vector3.UnitY;
 
             GridRegion finalDestination = null;
             try
             {
-                finalDestination = userAgentService.GetHomeRegion(aCircuit.AgentID, out position, out lookAt);
+                finalDestination = userAgentService.GetHomeRegion(id, out position, out lookAt);
             }
             catch (Exception e)
             {
@@ -473,20 +523,14 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
             if (finalDestination == null)
             {
-                client.SendTeleportFailed("Your home region could not be found");
+                if (notsame)
+                    client.SendAlertMessage("TeleportHome: Agent Home region not found");
+                targetClient.SendTeleportFailed("Home region not found");
                 m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: Agent's home region not found");
                 return false;
             }
 
-            ScenePresence sp = ((Scene)(client.Scene)).GetScenePresence(client.AgentId);
-            if (sp == null)
-            {
-                client.SendTeleportFailed("Internal error");
-                m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: Agent not found in the scene where it is supposed to be");
-                return false;
-            }
-
-            GridRegion homeGatekeeper = MakeRegion(aCircuit);
+            GridRegion homeGatekeeper = MakeGateKeeperRegion(homeURI);
 
             m_log.DebugFormat("[HG ENTITY TRANSFER MODULE]: teleporting user {0} {1} home to {2} via {3}:{4}",
                 aCircuit.firstname, aCircuit.lastname, finalDestination.RegionName, homeGatekeeper.ServerURI, homeGatekeeper.RegionName);
@@ -525,8 +569,13 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             {
                 // Foreign region
                 GatekeeperServiceConnector gConn = new GatekeeperServiceConnector();
-                GridRegion gatekeeper = new GridRegion();
-                gatekeeper.ServerURI = lm.Gatekeeper;
+                GridRegion gatekeeper = MakeGateKeeperRegion(lm.Gatekeeper);
+                if (gatekeeper == null)
+                {
+                    remoteClient.SendTeleportFailed("Could not parse landmark destiny URI");
+                    return;
+                }
+
                 string homeURI = Scene.GetAgentHomeURI(remoteClient.AgentId);
 
                 string message;
@@ -741,20 +790,20 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
         #endregion
 
-        private GridRegion MakeRegion(AgentCircuitData aCircuit)
+        private GridRegion MakeGateKeeperRegion(string wantedURI)
         {
-            GridRegion region = new GridRegion();
-
-            Uri uri = null;
-            if (!aCircuit.ServiceURLs.ContainsKey("HomeURI") ||
-                (aCircuit.ServiceURLs.ContainsKey("HomeURI") && !Uri.TryCreate(aCircuit.ServiceURLs["HomeURI"].ToString(), UriKind.Absolute, out uri)))
+            Uri uri;
+            if(!Uri.TryCreate(wantedURI, UriKind.Absolute, out uri))
                 return null;
+
+            GridRegion region = new GridRegion();
 
             region.ExternalHostName = uri.Host;
             region.HttpPort = (uint)uri.Port;
-            region.ServerURI = aCircuit.ServiceURLs["HomeURI"].ToString();
+            region.ServerURI = wantedURI;  //uri.AbsoluteUri for some reason default ports are needed
             region.RegionName = string.Empty;
             region.InternalEndPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Parse("0.0.0.0"), (int)0);
+            region.RegionFlags = OpenSim.Framework.RegionFlags.Hyperlink;
             return region;
         }
     }
