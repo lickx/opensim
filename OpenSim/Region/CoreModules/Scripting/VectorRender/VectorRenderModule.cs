@@ -125,7 +125,6 @@ namespace OpenSim.Region.CoreModules.Scripting.VectorRender
                 using (Font myFont = new Font(fontName, fontSize))
                 {
                     SizeF stringSize = new SizeF();
-
                     // XXX: This lock may be unnecessary.
                     lock (m_graph)
                     {
@@ -504,10 +503,24 @@ namespace OpenSim.Region.CoreModules.Scripting.VectorRender
 
                 foreach (string line in GetLines(data, dataDelim))
                 {
-                    string nextLine = line.Trim();
+                    string nextLine = line.TrimStart();
 
 //                    m_log.DebugFormat("[VECTOR RENDER MODULE]: Processing line '{0}'", nextLine);
 
+                    if (nextLine.StartsWith("Text") && nextLine.Length > 5)
+                    {
+                        int start = 4;
+                        if (nextLine[4] == ' ')
+                            start++;
+                        if (start < nextLine.Length)
+                        {
+                            nextLine = nextLine.Substring(start);
+                            graph.DrawString(nextLine, myFont, myBrush, startPoint);
+                        }
+                        continue;
+                    }
+
+                    nextLine = nextLine.TrimEnd();
                     if (nextLine.StartsWith("ResetTransf"))
                     {
                         graph.ResetTransform();
@@ -551,12 +564,6 @@ namespace OpenSim.Region.CoreModules.Scripting.VectorRender
                         graph.DrawLine(drawPen, startPoint, endPoint);
                         startPoint.X = endPoint.X;
                         startPoint.Y = endPoint.Y;
-                    }
-                    else if (nextLine.StartsWith("Text"))
-                    {
-                        nextLine = nextLine.Remove(0, 4);
-                        nextLine = nextLine.Trim();
-                        graph.DrawString(nextLine, myFont, myBrush, startPoint);
                     }
                     else if (nextLine.StartsWith("Image"))
                     {

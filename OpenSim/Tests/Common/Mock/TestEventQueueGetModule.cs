@@ -30,6 +30,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using log4net;
 using Nini.Config;
@@ -167,7 +168,7 @@ namespace OpenSim.Tests.Common
             AddEvent(receiverAgent, "AgentGroupDataUpdate", data);
         }
 
-        public OSD ScriptRunningEvent (UUID objectID, UUID itemID, bool running, bool mono)
+        public void ScriptRunningEvent (UUID objectID, UUID itemID, bool running, UUID avatarID)
         {
             Console.WriteLine("ONE");
             throw new System.NotImplementedException ();
@@ -183,5 +184,15 @@ namespace OpenSim.Tests.Common
         {
             AddEvent(avatarID, "partPhysicsProperties", localID, physhapetype, density, friction, bounce, gravmod);
         }
-    }
+
+        public StringBuilder StartEvent(string eventName)
+        {
+            return null;
+        }
+
+        public string EndEvent(StringBuilder sb)
+        {
+            return "";
+        }
+}
 }
