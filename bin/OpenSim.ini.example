@@ -417,10 +417,17 @@
     ;; If set to true, then all permissions checks are carried out
     ; serverside_object_permissions = true
 
-    ;# {allow_grid_gods} {} {Allow grid gods?} {true false} false
+	; if next 2 are false, several admin powers are only active if god powers requested on viewer
+	; this reduces mistakes
+	; set both to true to enable previous behaviour
+    automatic_gods = false
+    implicit_gods = false
+	
+	;# {allow_grid_gods} {} {Allow grid gods?} {true false} false
     ;; This allows users with a UserLevel of 200 or more to assume god
     ;; powers in the regions in this simulator.
-    ; allow_grid_gods = false
+	;; if you don't trust grid admins, what are you doing there?
+    allow_grid_gods = true
 
     ;; This allows some control over permissions
     ;; please note that this still doesn't duplicate SL, and is not intended to
@@ -1052,30 +1059,6 @@
     ;; Optionally include file to enable OSSL functions and set permissions on who can use which.
     ;; If this INI file is not included, the OSSL functions are disabled.
     Include-osslEnable = "config-include/osslEnable.ini"
-
-
-[MRM]
-    ;; Enables the Mini Region Modules Script Engine.
-    ; Enabled = false
-
-    ;; Runs MRM in a Security Sandbox
-    ;; WARNING: DISABLING IS A SECURITY RISK.
-    ; Sandboxed = true
-
-    ;; The level sandbox to use, adjust at your OWN RISK.
-    ;; Valid values are:
-    ;; *  FullTrust
-    ;; *  SkipVerification
-    ;; *  Execution
-    ;; *  Nothing
-    ;; *  LocalIntranet
-    ;; *  Internet
-    ;; *  Everything
-    ; SandboxLevel = "Internet"
-
-    ;; Only allow Region Owners to run MRMs
-    ;; May represent a security risk if you disable this.
-    ; OwnerOnly = true
 
 
 [FreeSwitchVoice]
