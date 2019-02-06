@@ -183,28 +183,6 @@ namespace OpenSim.Region.OptionalModules.Avatar.Voice.FreeSwitchVoice
                 m_log.ErrorFormat("[FreeSwitchVoice]: plugin initialization failed: {0} {1}", e.Message, e.StackTrace);
                 return;
             }
-
-            // This here is a region module trying to make a global setting.
-            // Not really a good idea but it's Windows only, so I can't test.
-            try
-            {
-                ServicePointManager.ServerCertificateValidationCallback += CustomCertificateValidation;
-            }
-            catch (NotImplementedException)
-            {
-                try
-                {
-#pragma warning disable 0612, 0618
-                    // Mono does not implement the ServicePointManager.ServerCertificateValidationCallback yet!  Don't remove this!
-                    ServicePointManager.CertificatePolicy = new MonoCert();
-#pragma warning restore 0612, 0618
-                }
-                catch (Exception)
-                {
-                    // COmmented multiline spam log message
-                    //m_log.Error("[FreeSwitchVoice]: Certificate validation handler change not supported.  You may get ssl certificate validation errors teleporting from your region to some SSL regions.");
-                }
-            }
         }
 
         public void PostInitialise()
@@ -541,6 +519,7 @@ namespace OpenSim.Region.OptionalModules.Avatar.Voice.FreeSwitchVoice
             forwardreq.Method = method;
             forwardreq.ContentType = contenttype;
             forwardreq.KeepAlive = false;
+            forwardreq.ServerCertificateValidationCallback = CustomCertificateValidation;
 
             if (method == "POST")
             {
@@ -883,17 +862,5 @@ namespace OpenSim.Region.OptionalModules.Avatar.Voice.FreeSwitchVoice
 
             return response;
         }
-    }
-
-    public class MonoCert : ICertificatePolicy
-    {
-        #region ICertificatePolicy Members
-
-        public bool CheckValidationResult(ServicePoint srvPoint, X509Certificate certificate, WebRequest request, int certificateProblem)
-        {
-            return true;
-        }
-
-        #endregion
     }
 }
