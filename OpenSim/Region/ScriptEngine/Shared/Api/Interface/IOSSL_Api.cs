@@ -401,8 +401,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
 
         LSL_String osUnixTimeToTimestamp(LSL_Integer time);
 
-        LSL_String osGetInventoryDesc(string item);
-
         LSL_Integer osInviteToGroup(LSL_Key agentId);
         LSL_Integer osEjectFromGroup(LSL_Key agentId);
 
@@ -547,5 +545,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         LSL_Integer osApproxEquals(vector va, vector vb, LSL_Float margin);
         LSL_Integer osApproxEquals(rotation ra, rotation rb);
         LSL_Integer osApproxEquals(rotation ra, rotation rb, LSL_Float margin);
+        LSL_Key osGetInventoryLastOwner(LSL_String itemNameOrId);
+        LSL_String osGetInventoryName(LSL_Key itemId);
+        LSL_String osGetInventoryDesc(LSL_String itemNameOrId);
+        LSL_Key osGetLastChangedEventKey();
     }
 }

@@ -3890,29 +3890,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         }
 
         /// <summary>
-        /// Get the description from an inventory item
-        /// </summary>
-        /// <param name="inventoryName"></param>
-        /// <returns>Item description</returns>
-        public LSL_String osGetInventoryDesc(string item)
-        {
-            CheckThreatLevel();
-
-            lock (m_host.TaskInventory)
-            {
-                foreach (KeyValuePair<UUID, TaskInventoryItem> inv in m_host.TaskInventory)
-                {
-                    if (inv.Value.Name == item)
-                    {
-                        return inv.Value.Description.ToString();
-                    }
-                }
-            }
-
-            return String.Empty;
-        }
-
-        /// <summary>
         /// Invite user to the group this object is set to
         /// </summary>
         /// <param name="agentId"></param>
@@ -4874,8 +4851,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return Math.Atan2(mcross, dot);
         }
 
-
-//******* link sound
        public void osAdjustSoundVolume(LSL_Integer linknum, LSL_Float volume)
         {
             m_host.AddScriptLPS(1);
@@ -5406,5 +5381,65 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return 1;
         }
 
+        public LSL_Key osGetInventoryLastOwner(LSL_String itemNameorid)
+        {
+            m_host.AddScriptLPS(1);
+
+            TaskInventoryItem item = null;
+            UUID itemID;
+            if (UUID.TryParse(itemNameorid, out itemID))
+                item = m_host.Inventory.GetInventoryItem(itemID);
+            else
+                item = m_host.Inventory.GetInventoryItem(itemNameorid);
+
+            if (item == null)
+                return UUID.Zero.ToString();
+
+            UUID id = item.LastOwnerID;
+            if(id == UUID.Zero)
+                id= item.OwnerID;
+            return id.ToString();
+        }
+
+        public LSL_String osGetInventoryName(LSL_Key itemId)
+        {
+            m_host.AddScriptLPS(1);
+
+            TaskInventoryItem item = null;
+            UUID itemID;
+            if (UUID.TryParse(itemId, out itemID))
+                item = m_host.Inventory.GetInventoryItem(itemID);
+
+            if (item == null)
+                return String.Empty;
+
+            return item.Name;
+        }
+
+        public LSL_String osGetInventoryDesc(LSL_String itemNameorid)
+        {
+            m_host.AddScriptLPS(1);
+
+            TaskInventoryItem item = null;
+            UUID itemID;
+            if (UUID.TryParse(itemNameorid, out itemID))
+                item = m_host.Inventory.GetInventoryItem(itemID);
+            else
+                item = m_host.Inventory.GetInventoryItem(itemNameorid);
+
+            if (item == null)
+                return String.Empty;
+
+            return item.Description;
+        }
+
+        public LSL_Key osGetLastChangedEventKey()
+        {
+            m_host.AddScriptLPS(1);
+            DetectParams detectedParams = m_ScriptEngine.GetDetectParams(m_item.ItemID, 0);
+            if (detectedParams == null)
+                return String.Empty;
+            return detectedParams.Key.ToString();
+        }
     }
 }

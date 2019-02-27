@@ -1060,11 +1060,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_OSSL_Functions.osUnixTimeToTimestamp(time);
         }
 
-        public LSL_String osGetInventoryDesc(string item)
-        {
-            return m_OSSL_Functions.osGetInventoryDesc(item);
-        }
-
         public LSL_Integer osInviteToGroup(LSL_Key agentId)
         {
             return m_OSSL_Functions.osInviteToGroup(agentId);
@@ -1365,6 +1360,26 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public LSL_Integer osApproxEquals(rotation ra, rotation rb, LSL_Float margin)
         {
             return m_OSSL_Functions.osApproxEquals(ra, rb, margin);
+        }
+
+        public LSL_Key osGetInventoryLastOwner(LSL_String itemNameOrId)
+        {
+            return m_OSSL_Functions.osGetInventoryLastOwner(itemNameOrId);
+        }
+
+        public LSL_String osGetInventoryName(LSL_Key itemId)
+        {
+            return m_OSSL_Functions.osGetInventoryName(itemId);
+        }
+
+        public LSL_String osGetInventoryDesc(LSL_String itemNameOrId)
+        {
+            return m_OSSL_Functions.osGetInventoryDesc(itemNameOrId);
+        }
+
+        public LSL_Key osGetLastChangedEventKey()
+        {
+            return m_OSSL_Functions.osGetLastChangedEventKey();
         }
     }
 }
