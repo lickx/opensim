@@ -3827,31 +3827,135 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             OutPacket(avp, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
         }
 
+/*
         public void SendAnimations(UUID[] animations, int[] seqs, UUID sourceAgentId, UUID[] objectIDs)
         {
 //            m_log.DebugFormat("[LLCLIENTVIEW]: Sending animations for {0} to {1}", sourceAgentId, Name);
 
             AvatarAnimationPacket ani = (AvatarAnimationPacket)PacketPool.Instance.GetPacket(PacketType.AvatarAnimation);
             // TODO: don't create new blocks if recycling an old packet
-            ani.AnimationSourceList = new AvatarAnimationPacket.AnimationSourceListBlock[animations.Length];
             ani.Sender = new AvatarAnimationPacket.SenderBlock();
             ani.Sender.ID = sourceAgentId;
             ani.AnimationList = new AvatarAnimationPacket.AnimationListBlock[animations.Length];
             ani.PhysicalAvatarEventList = new AvatarAnimationPacket.PhysicalAvatarEventListBlock[0];
 
-            for (int i = 0; i < animations.Length; ++i)
+            //self animations
+            if (sourceAgentId == AgentId)
             {
-                ani.AnimationList[i] = new AvatarAnimationPacket.AnimationListBlock();
-                ani.AnimationList[i].AnimID = animations[i];
-                ani.AnimationList[i].AnimSequenceID = seqs[i];
+                List<int> withobjects = new List<int>(animations.Length);
+                List<int> noobjects = new List<int>(animations.Length);
+                for(int i = 0; i < animations.Length; ++i)
+                {
+                    if(objectIDs[i] == sourceAgentId || objectIDs[i] == UUID.Zero)
+                        noobjects.Add(i);
+                    else
+                        withobjects.Add(i);
+                }
 
-                ani.AnimationSourceList[i] = new AvatarAnimationPacket.AnimationSourceListBlock();
-                if (objectIDs[i].Equals(sourceAgentId))
-                    ani.AnimationSourceList[i].ObjectID = UUID.Zero;
-                else
-                    ani.AnimationSourceList[i].ObjectID = objectIDs[i];
+                ani.AnimationSourceList = new AvatarAnimationPacket.AnimationSourceListBlock[withobjects.Count];
+                int k = 0;
+                foreach (int i in withobjects)
+                {
+                    ani.AnimationList[k] = new AvatarAnimationPacket.AnimationListBlock();
+                    ani.AnimationList[k].AnimID = animations[i];
+                    ani.AnimationList[k].AnimSequenceID = seqs[i];
+                    ani.AnimationSourceList[k] = new AvatarAnimationPacket.AnimationSourceListBlock();
+                    ani.AnimationSourceList[k].ObjectID = objectIDs[i];
+                    k++;
+                }
+                foreach (int i in noobjects)
+                {
+                    ani.AnimationList[k] = new AvatarAnimationPacket.AnimationListBlock();
+                    ani.AnimationList[k].AnimID = animations[i];
+                    ani.AnimationList[k].AnimSequenceID = seqs[i];
+                    k++;
+                }
             }
+            else
+            {
+                ani.AnimationSourceList = new AvatarAnimationPacket.AnimationSourceListBlock[0];
+                for (int i = 0; i < animations.Length; ++i)
+                {
+                    ani.AnimationList[i] = new AvatarAnimationPacket.AnimationListBlock();
+                    ani.AnimationList[i].AnimID = animations[i];
+                    ani.AnimationList[i].AnimSequenceID = seqs[i];
+                }
+            }
+
             OutPacket(ani, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
+        }
+*/
+
+        static private readonly byte[] AvatarAnimationHeader = new byte[] {
+                Helpers.MSG_RELIABLE,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                20 // ID (high frequency)
+                };
+
+        public void SendAnimations(UUID[] animations, int[] seqs, UUID sourceAgentId, UUID[] objectIDs)
+        {
+            //            m_log.DebugFormat("[LLCLIENTVIEW]: Sending animations for {0} to {1}", sourceAgentId, Name);
+
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
+            //setup header
+            Buffer.BlockCopy(AvatarAnimationHeader, 0, data, 0, 7);
+            //agent block
+            sourceAgentId.ToBytes(data, 7);
+
+            // animations count
+            data[23] = (byte)animations.Length;
+
+            int pos = 24;
+
+            //self animations
+            if (sourceAgentId == AgentId)
+            {
+                List<int> withobjects = new List<int>(animations.Length);
+                List<int> noobjects = new List<int>(animations.Length);
+                for (int i = 0; i < animations.Length; ++i)
+                {
+                    if (objectIDs[i] == sourceAgentId || objectIDs[i] == UUID.Zero)
+                        noobjects.Add(i);
+                    else
+                        withobjects.Add(i);
+                }
+
+                // first the ones with corresponding objects
+                foreach (int i in withobjects)
+                {
+                    animations[i].ToBytes(data, pos); pos += 16;
+                    Utils.IntToBytesSafepos(seqs[i], data, pos); pos += 4;
+                }
+                // then the rest
+                foreach (int i in noobjects)
+                {
+                    animations[i].ToBytes(data, pos); pos += 16;
+                    Utils.IntToBytesSafepos(seqs[i], data, pos); pos += 4;
+                }
+                // object ids block
+                data[pos++] = (byte)withobjects.Count;
+                foreach (int i in withobjects)
+                {
+                    objectIDs[i].ToBytes(data, pos); pos += 16;
+                }
+            }
+            else
+            {
+                for(int i = 0; i < animations.Length; ++i)
+                {
+                    animations[i].ToBytes(data, pos); pos += 16;
+                    Utils.IntToBytesSafepos(seqs[i], data, pos); pos += 4;
+                }
+                data[pos++] = 0; // no object ids
+            }
+
+            data[pos++] = 0; // no physical avatar events
+
+            buf.DataLength = pos;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority,
+                       null, false, false);
         }
 
         public void SendObjectAnimations(UUID[] animations, int[] seqs, UUID senderId)
@@ -4181,7 +4285,12 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     }
 
                     if (grp.IsAttachment)
-                    {   // Someone else's HUD, why are we getting these?
+                    {
+                        // animated attachments are nasty if not supported by viewer
+                        if(!m_SupportObjectAnimations && grp.RootPart.Shape.MeshFlagEntry)
+                            continue;
+
+                        // Someone else's HUD, why are we getting these?
                         if (grp.OwnerID != AgentId && grp.HasPrivateAttachmentPoint)
                             continue;
 
