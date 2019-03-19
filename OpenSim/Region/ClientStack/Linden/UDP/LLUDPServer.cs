@@ -970,7 +970,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
             bool highPriority = false;
 
-            if(zerocode)
+            if (zerocode)
                 buffer = ZeroEncode(buffer);
 
             if (category != ThrottleOutPacketType.Unknown && (category & ThrottleOutPacketType.HighPriority) != 0)
@@ -989,49 +989,116 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 SendPacketFinal(outgoingPacket);
         }
 
+        public void SendUDPPacket(LLUDPClient udpClient, UDPPacketBuffer buffer, ThrottleOutPacketType category)
+        {
+            bool highPriority = false;
+
+            if (category != ThrottleOutPacketType.Unknown && (category & ThrottleOutPacketType.HighPriority) != 0)
+            {
+                category = (ThrottleOutPacketType)((int)category & 127);
+                highPriority = true;
+            }
+
+            OutgoingPacket outgoingPacket = new OutgoingPacket(udpClient, buffer, category, null);
+
+            // If we were not provided a method for handling unacked, use the UDPServer default method
+            if ((outgoingPacket.Buffer.Data[0] & Helpers.MSG_RELIABLE) != 0)
+                outgoingPacket.UnackedMethod = delegate (OutgoingPacket oPacket) { ResendUnacked(oPacket); };
+
+            if (!outgoingPacket.Client.EnqueueOutgoing(outgoingPacket, false, highPriority))
+                SendPacketFinal(outgoingPacket);
+        }
+
+        static private readonly byte[] PacketAckHeader = new byte[] {
+                0,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0xff, 0xfb // ID 65531 (low frequency bigendian)
+                };
+
         public void SendAcks(LLUDPClient udpClient)
         {
+            if(udpClient.PendingAcks.Count == 0)
+                return;
+
+            UDPPacketBuffer buf = GetNewUDPBuffer(udpClient.RemoteEndPoint);
+            Buffer.BlockCopy(PacketAckHeader, 0, buf.Data, 0, 10);
+            byte[] data = buf.Data;
+            // count at position 10
+            int pos = 11;
+
             uint ack;
-
-            if (udpClient.PendingAcks.Dequeue(out ack))
+            int count = 0;
+            while (udpClient.PendingAcks.Dequeue(out ack))
             {
-                List<PacketAckPacket.PacketsBlock> blocks = new List<PacketAckPacket.PacketsBlock>();
-                PacketAckPacket.PacketsBlock block = new PacketAckPacket.PacketsBlock();
-                block.ID = ack;
-                blocks.Add(block);
+                Utils.UIntToBytes(ack, data, pos); pos += 4;
+                ++count;
 
-                while (udpClient.PendingAcks.Dequeue(out ack))
+                if (count == 255)
                 {
-                    block = new PacketAckPacket.PacketsBlock();
-                    block.ID = ack;
-                    blocks.Add(block);
+                    data[10] = 255;
+                    buf.DataLength = pos;
+                    SendUDPPacket(udpClient, buf, ThrottleOutPacketType.Unknown);
+
+                    buf = GetNewUDPBuffer(udpClient.RemoteEndPoint);
+                    Buffer.BlockCopy(PacketAckHeader, 0, buf.Data, 0, 10);
+                    data = buf.Data;
+                    pos = 11;
+                    count = 0;
                 }
-
-                PacketAckPacket packet = new PacketAckPacket();
-                packet.Header.Reliable = false;
-                packet.Packets = blocks.ToArray();
-
-                SendPacket(udpClient, packet, ThrottleOutPacketType.Unknown, true, null);
+            }
+            if (count > 0)
+            {
+                data[10] = (byte)count;
+                buf.DataLength = pos;
+                SendUDPPacket(udpClient, buf, ThrottleOutPacketType.Unknown);
             }
         }
 
+        static private readonly byte[] StartPingCheckHeader = new byte[] {
+                0,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                1 // ID 1 (high frequency)
+                };
+
         public void SendPing(LLUDPClient udpClient)
         {
-            StartPingCheckPacket pc = (StartPingCheckPacket)PacketPool.Instance.GetPacket(PacketType.StartPingCheck);
+            UDPPacketBuffer buf = GetNewUDPBuffer(udpClient.RemoteEndPoint);
+            Buffer.BlockCopy(StartPingCheckHeader, 0, buf.Data, 0, 7);
+            byte[] data = buf.Data;
 
-            pc.PingID.PingID = (byte)udpClient.CurrentPingSequence++;
-            // We *could* get OldestUnacked, but it would hurt performance and not provide any benefit
-            pc.PingID.OldestUnacked = 0;
+            data[7] = udpClient.CurrentPingSequence++;
+            // older seq number of our un ack packets, so viewers could clean deduplication lists TODO
+            //Utils.UIntToBytes(0, data, 8);
+            data[8] = 0;
+            data[9] = 0;
+            data[10] = 0;
+            data[11] = 0;
 
-            SendPacket(udpClient, pc, ThrottleOutPacketType.Unknown, false, null);
-            udpClient.m_lastStartpingTimeMS = Util.EnvironmentTickCount();
+            buf.DataLength = 12;
+            SendUDPPacket(udpClient, buf, ThrottleOutPacketType.Unknown);
+
+            udpClient.m_lastStartpingTimeMS = Util.GetTimeStampMS();
         }
+
+        static private readonly byte[] CompletePingCheckHeader = new byte[] {
+                0,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                2 // ID 1 (high frequency)
+                };
 
         public void CompletePing(LLUDPClient udpClient, byte pingID)
         {
-            CompletePingCheckPacket completePing = new CompletePingCheckPacket();
-            completePing.PingID.PingID = pingID;
-            SendPacket(udpClient, completePing, ThrottleOutPacketType.Unknown, false, null);
+            UDPPacketBuffer buf = GetNewUDPBuffer(udpClient.RemoteEndPoint);
+            Buffer.BlockCopy(CompletePingCheckHeader, 0, buf.Data, 0, 7);
+            byte[] data = buf.Data;
+
+            data[7] = pingID;
+
+            buf.DataLength = 8;
+            SendUDPPacket(udpClient, buf, ThrottleOutPacketType.Unknown);
         }
 
         public void HandleUnacked(LLClientView client)
@@ -1121,8 +1188,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             int dataLength = buffer.DataLength;
 
-            // NOTE: I'm seeing problems with some viewers when ACKs are appended to zerocoded packets so I've disabled that here
-            if (!isZerocoded && !isResend && outgoingPacket.UnackedMethod == null)
+            // only append acks on plain reliable messages
+            if (flags == Helpers.MSG_RELIABLE && outgoingPacket.UnackedMethod == null)
             {
                 // Keep appending ACKs until there is no room left in the buffer or there are
                 // no more ACKs to append
@@ -1459,11 +1526,11 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             }
             else if (packet.Type == PacketType.CompletePingCheck)
             {
-                int t = Util.EnvironmentTickCountSubtract(udpClient.m_lastStartpingTimeMS);
-                int c = udpClient.m_pingMS;
+                double t = Util.GetTimeStampMS() - udpClient.m_lastStartpingTimeMS;
+                double c = udpClient.m_pingMS;
                 c = 800 * c + 200 * t;
                 c /= 1000;
-                udpClient.m_pingMS = c;
+                udpClient.m_pingMS = (int)c;
                 return;
             }
 
@@ -1643,8 +1710,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         m_pendingCache.Remove(endPoint);
                     }
 
-                    client.CheckViewerCaps();
-
                     m_log.DebugFormat("[LLUDPSERVER]: Client created, processing pending queue, {0} entries", queue.Count);
                     // Reinject queued packets
                     while (queue.Count > 0)
@@ -1659,6 +1724,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     // The client will be null if it already exists (e.g. if on a region crossing the client sends a use
                     // circuit code to the existing child agent.  This is not particularly obvious.
                     SendAckImmediate(endPoint, uccp.Header.Sequence);
+
+                    client.CheckViewerCaps();
 
                     // We only want to send initial data to new clients, not ones which are being converted from child to root.
                     if (client != null)

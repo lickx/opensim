@@ -332,7 +332,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         private readonly UUID m_secureSessionId;
         protected readonly UUID m_agentId;
         private readonly uint m_circuitCode;
-        private readonly byte[] m_channelVersion = Utils.EmptyBytes;
+        private readonly byte[] m_regionChannelVersion = Utils.EmptyBytes;
         private readonly IGroupsModule m_GroupsModule;
 
 //        private int m_cachedTextureSerial;
@@ -531,7 +531,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             m_assetService = m_scene.RequestModuleInterface<IAssetService>();
             m_GroupsModule = scene.RequestModuleInterface<IGroupsModule>();
             ImageManager = new LLImageManager(this, m_assetService, Scene.RequestModuleInterface<IJ2KDecoder>());
-            m_channelVersion = Util.StringToBytes256(scene.GetSimulatorVersion());
+            m_regionChannelVersion = Util.StringToBytes1024(scene.GetSimulatorVersion());
             m_agentId = agentId;
             m_sessionId = sessionId;
             m_secureSessionId = sessionInfo.LoginInfo.SecureSession;
@@ -865,123 +865,365 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             OutPacket(handshake, ThrottleOutPacketType.Unknown);
         }
 
+        static private readonly byte[] AgentMovementCompleteHeader = new byte[] {
+                Helpers.MSG_RELIABLE,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0, 250 // ID 250 (low frequency bigendian)
+                };
 
         public void MoveAgentIntoRegion(RegionInfo regInfo, Vector3 pos, Vector3 look)
         {
+            // reset agent update args
             m_thisAgentUpdateArgs.CameraAtAxis.X = float.MinValue;
             m_thisAgentUpdateArgs.lastUpdateTS = 0;
             m_thisAgentUpdateArgs.ControlFlags = 0;
 
-            AgentMovementCompletePacket mov = (AgentMovementCompletePacket)PacketPool.Instance.GetPacket(PacketType.AgentMovementComplete);
-            mov.SimData.ChannelVersion = m_channelVersion;
-            mov.AgentData.SessionID = m_sessionId;
-            mov.AgentData.AgentID = AgentId;
-            mov.Data.RegionHandle = regInfo.RegionHandle;
-            mov.Data.Timestamp = (uint)Util.UnixTimeSinceEpoch();
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
 
+            //setup header
+            Buffer.BlockCopy(AgentMovementCompleteHeader, 0, data, 0, 10);
+
+            //AgentData block
+            AgentId.ToBytes(data, 10); // 26
+            SessionId.ToBytes(data, 26); // 42
+
+            //Data block
             if ((pos.X == 0) && (pos.Y == 0) && (pos.Z == 0))
+                m_startpos.ToBytes(data, 42); //54
+            else
+                pos.ToBytes(data, 42); //54
+            look.ToBytes(data, 54); // 66
+            Utils.UInt64ToBytesSafepos(regInfo.RegionHandle, data, 66); // 74
+            Utils.UIntToBytesSafepos((uint)Util.UnixTimeSinceEpoch(), data, 74); //78
+
+            //SimData
+            int len = m_regionChannelVersion.Length;
+            if(len == 0)
             {
-                mov.Data.Position = m_startpos;
+                data[78] = 0;
+                data[79] = 0;
             }
             else
             {
-                mov.Data.Position = pos;
+                data[78] = (byte)len;
+                data[79] = (byte)(len >> 8);
+                Buffer.BlockCopy(m_regionChannelVersion, 0, data, 80, len);
             }
-            mov.Data.LookAt = look;
 
-            // Hack to get this out immediately and skip the throttles
-            OutPacket(mov, ThrottleOutPacketType.Unknown);
+            buf.DataLength = 80 + len;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Unknown);
         }
 
-        public void SendChatMessage(
-            string message, byte type, Vector3 fromPos, string fromName,
-            UUID fromAgentID, UUID ownerID, byte source, byte audible)
-        {
-            ChatFromSimulatorPacket reply = (ChatFromSimulatorPacket)PacketPool.Instance.GetPacket(PacketType.ChatFromSimulator);
-            reply.ChatData.Audible = audible;
-            reply.ChatData.Message = Util.StringToBytes1024(message);
-            reply.ChatData.ChatType = type;
-            reply.ChatData.SourceType = source;
-            reply.ChatData.Position = fromPos;
-            reply.ChatData.FromName = Util.StringToBytes256(fromName);
-            reply.ChatData.OwnerID = ownerID;
-            reply.ChatData.SourceID = fromAgentID;
+        static private readonly byte[] ChatFromSimulatorHeader = new byte[] {
+                Helpers.MSG_RELIABLE,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0, 139 // ID 139 (low frequency bigendian)
+                };
 
-            OutPacket(reply, ThrottleOutPacketType.Unknown);
+        public void SendChatMessage(string message, byte chattype, Vector3 fromPos, string fromName,
+            UUID sourceID, UUID ownerID, byte sourcetype, byte audible)
+        {
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
+
+            //setup header
+            Buffer.BlockCopy(ChatFromSimulatorHeader, 0, data, 0, 10);
+
+            byte[] fname = Util.StringToBytes256(fromName);
+            int len = fname.Length;
+            int pos = 11;
+            if (len == 0)
+                data[10] = 0;
+            else
+            {
+                data[10] = (byte)len;
+                Buffer.BlockCopy(fname, 0, data, 11, len);
+                pos += len;
+            }
+
+            sourceID.ToBytes(data, pos); pos += 16;
+            ownerID.ToBytes(data, pos); pos += 16;
+            data[pos++] = sourcetype;
+            data[pos++] = chattype;
+            data[pos++] = audible;
+            fromPos.ToBytes(data, pos); pos += 12;
+
+            byte[] msg = Util.StringToBytes1024(message);
+            len = msg.Length;
+            if (len == 0)
+            {
+                data[pos++] = 0;
+                data[pos++] = 0;
+            }
+            else
+            {
+                data[pos++] = (byte)len;
+                data[pos++] = (byte)(len >> 8);
+                Buffer.BlockCopy(msg, 0, data, pos, len); pos += len;
+            }
+
+            buf.DataLength = pos;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Unknown);
         }
 
         /// <summary>
         /// Send an instant message to this client
         /// </summary>
         //
+
+        static private readonly byte[] ImprovedInstantMessageHeader = new byte[] {
+                Helpers.MSG_RELIABLE, //| Helpers.MSG_ZEROCODED, not doing spec zeroencode on this
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0, 254 // ID 139 (low frequency bigendian)
+                };
+
         public void SendInstantMessage(GridInstantMessage im)
         {
-            if (((Scene)(m_scene)).Permissions.CanInstantMessage(new UUID(im.fromAgentID), new UUID(im.toAgentID)))
+            UUID fromAgentID = new UUID(im.fromAgentID);
+            UUID toAgentID = new UUID(im.toAgentID);
+
+            if (!m_scene.Permissions.CanInstantMessage(fromAgentID, toAgentID))
+                return;
+
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
+
+            //setup header
+            Buffer.BlockCopy(ImprovedInstantMessageHeader, 0, data, 0, 10);
+
+            //agentdata block
+            fromAgentID.ToBytes(data, 10); // 26
+            UUID.Zero.ToBytes(data, 26); // 42  sessionID  zero?? TO check
+
+            int pos = 42;
+
+            //MessageBlock
+            data[pos++] = (byte)((im.fromGroup) ? 1 : 0);
+            toAgentID.ToBytes(data, pos); pos += 16;
+            Utils.UIntToBytesSafepos(im.ParentEstateID, data, pos); pos += 4;
+            (new UUID(im.RegionID)).ToBytes(data, pos); pos += 16;
+            (im.Position).ToBytes(data, pos); pos += 12;
+            data[pos++] = im.offline;
+            data[pos++] = im.dialog;
+
+            // this is odd
+            if (im.imSessionID == UUID.Zero.Guid)
+                (fromAgentID ^ toAgentID).ToBytes(data, pos);
+            else
+                (new UUID(im.imSessionID)).ToBytes(data, pos);
+
+            pos += 16;
+
+            Utils.UIntToBytesSafepos(im.timestamp, data, pos); pos += 4;
+
+            byte[] tmp = Util.StringToBytes256(im.fromAgentName);
+            int len = tmp.Length;
+            data[pos++] = (byte)len;
+            if(len > 0)
+                Buffer.BlockCopy(tmp, 0, data, pos, len); pos += len;
+
+            tmp = Util.StringToBytes1024(im.message);
+            len = tmp.Length;
+            if (len == 0)
             {
-                ImprovedInstantMessagePacket msg
-                    = (ImprovedInstantMessagePacket)PacketPool.Instance.GetPacket(PacketType.ImprovedInstantMessage);
-
-                msg.AgentData.AgentID = new UUID(im.fromAgentID);
-                msg.AgentData.SessionID = UUID.Zero;
-                msg.MessageBlock.FromAgentName = Util.StringToBytes256(im.fromAgentName);
-                msg.MessageBlock.Dialog = im.dialog;
-                msg.MessageBlock.FromGroup = im.fromGroup;
-                // this is odd
-                if (im.imSessionID == UUID.Zero.Guid)
-                    msg.MessageBlock.ID = new UUID(im.fromAgentID) ^ new UUID(im.toAgentID);
-                else
-                    msg.MessageBlock.ID = new UUID(im.imSessionID);
-                msg.MessageBlock.Offline = im.offline;
-                msg.MessageBlock.ParentEstateID = im.ParentEstateID;
-                msg.MessageBlock.Position = im.Position;
-                msg.MessageBlock.RegionID = new UUID(im.RegionID);
-                msg.MessageBlock.Timestamp = im.timestamp;
-                msg.MessageBlock.ToAgentID = new UUID(im.toAgentID);
-                msg.MessageBlock.Message = Util.StringToBytes1024(im.message);
-                msg.MessageBlock.BinaryBucket = im.binaryBucket;
-
-                OutPacket(msg, ThrottleOutPacketType.Task);
+                data[pos++] = 0;
+                data[pos++] = 0;
             }
+            else
+            {
+                data[pos++] = (byte)len;
+                data[pos++] = (byte)(len >> 8);
+                Buffer.BlockCopy(tmp, 0, data, pos, len); pos += len;
+            }
+
+            tmp = im.binaryBucket;
+            if(tmp == null)
+            {
+                data[pos++] = 0;
+                data[pos++] = 0;
+            }
+            else
+            {
+                len = tmp.Length;
+                if (len == 0)
+                {
+                    data[pos++] = 0;
+                    data[pos++] = 0;
+                }
+                else
+                {
+                    data[pos++] = (byte)len;
+                    data[pos++] = (byte)(len >> 8);
+                    Buffer.BlockCopy(tmp, 0, data, pos, len); pos += len;
+                }
+            }
+
+            //EstateBlock does not seem in use TODO
+            //Utils.UIntToBytesSafepos(m_scene.RegionInfo.EstateSettings.EstateID, data, pos); pos += 4;
+            data[pos++] = 0;
+            data[pos++] = 0;
+            data[pos++] = 0;
+            data[pos++] = 0;
+
+            buf.DataLength = pos;
+            //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Unknown, null, false, true);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Unknown);
         }
+
+        static private readonly byte[] GenericMessageHeader = new byte[] {
+                Helpers.MSG_RELIABLE, //| Helpers.MSG_ZEROCODED, not doing spec zeroencode on this
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 1, 5 // ID 261 (low frequency bigendian)
+                };
 
         public void SendGenericMessage(string method, UUID invoice, List<string> message)
         {
-            GenericMessagePacket gmp = new GenericMessagePacket();
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
 
-            gmp.AgentData.AgentID = AgentId;
-            gmp.AgentData.SessionID = m_sessionId;
-            gmp.AgentData.TransactionID = invoice;
+            //setup header
+            Buffer.BlockCopy(GenericMessageHeader, 0, data, 0, 10);
 
-            gmp.MethodData.Method = Util.StringToBytes256(method);
-            gmp.ParamList = new GenericMessagePacket.ParamListBlock[message.Count];
-            int i = 0;
-            foreach (string val in message)
+            //agentdata block
+            m_agentId.ToBytes(data, 10); // 26
+            m_sessionId.ToBytes(data, 26); // 42  sessionID  zero?? TO check
+            UUID.Zero.ToBytes(data, 42); // 58
+
+            int pos = 58;
+
+            //method block
+            byte[] tmp = Util.StringToBytes256(method);
+            int len = tmp.Length;
+            data[pos++] = (byte)len;
+            if (len > 0)
+                Buffer.BlockCopy(tmp, 0, data, pos, len); pos += len;
+            invoice.ToBytes(data, pos); pos += 16;
+
+            //ParamList block
+            if (message.Count == 0)
             {
-                gmp.ParamList[i] = new GenericMessagePacket.ParamListBlock();
-                gmp.ParamList[i++].Parameter = Util.StringToBytes256(val);
+                data[pos++] = 0;
+                buf.DataLength = pos;
+                //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
+                return;
             }
 
-            OutPacket(gmp, ThrottleOutPacketType.Task);
+            int countpos = pos;
+            ++pos;
+
+            int count = 0;
+            foreach (string val in message)
+            {
+                tmp = Util.StringToBytes256(val);
+                len = tmp.Length;
+
+                if (pos + len >= LLUDPServer.MAXPAYLOAD)
+                {
+                    data[countpos] = (byte)count;
+                    buf.DataLength = pos;
+                    //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
+
+                    UDPPacketBuffer newbuf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+                    Buffer.BlockCopy(data, 0, newbuf.Data, 0, countpos);
+                    buf = newbuf;
+                    data = buf.Data;
+                    pos = countpos + 1;
+                    count = 1;
+                }
+                else
+                    ++count;
+
+                data[pos++] = (byte)len;
+                if (len > 0)
+                    Buffer.BlockCopy(tmp, 0, data, pos, len); pos += len;
+            }
+            if (count > 0)
+            {
+                data[countpos] = (byte)count;
+                buf.DataLength = pos;
+                //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
+            }
         }
 
         public void SendGenericMessage(string method, UUID invoice, List<byte[]> message)
         {
-            GenericMessagePacket gmp = new GenericMessagePacket();
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
 
-            gmp.AgentData.AgentID = AgentId;
-            gmp.AgentData.SessionID = m_sessionId;
-            gmp.AgentData.TransactionID = invoice;
+            //setup header
+            Buffer.BlockCopy(GenericMessageHeader, 0, data, 0, 10);
 
-            gmp.MethodData.Method = Util.StringToBytes256(method);
-            gmp.ParamList = new GenericMessagePacket.ParamListBlock[message.Count];
-            int i = 0;
-            foreach (byte[] val in message)
+            //agentdata block
+            m_agentId.ToBytes(data, 10); // 26
+            m_sessionId.ToBytes(data, 26); // 42  sessionID  zero?? TO check
+            UUID.Zero.ToBytes(data, 42); // 58
+
+            int pos = 58;
+
+            //method block
+            byte[] tmp = Util.StringToBytes256(method);
+            int len = tmp.Length;
+            data[pos++] = (byte)len;
+            if (len > 0)
+                Buffer.BlockCopy(tmp, 0, data, pos, len); pos += len;
+            invoice.ToBytes(data, pos); pos += 16;
+
+            //ParamList block
+            if (message.Count == 0)
             {
-                gmp.ParamList[i] = new GenericMessagePacket.ParamListBlock();
-                gmp.ParamList[i++].Parameter = val;
+                data[pos++] = 0;
+                buf.DataLength = pos;
+                //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
+                return;
             }
 
-            OutPacket(gmp, ThrottleOutPacketType.Task);
+            int countpos = pos;
+            ++pos;
+
+            int count = 0;
+            foreach (byte[] val in message)
+            {
+                len = val.Length;
+                if(len > 255)
+                    len = 255;
+
+                if (pos + len >= LLUDPServer.MAXPAYLOAD)
+                {
+                    data[countpos] = (byte)count;
+                    buf.DataLength = pos;
+                    //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
+
+                    UDPPacketBuffer newbuf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+                    Buffer.BlockCopy(data, 0, newbuf.Data, 0, countpos);
+                    buf = newbuf;
+                    data = buf.Data;
+                    pos = countpos + 1;
+                    count = 1;
+                }
+                else
+                    ++count;
+
+                data[pos++] = (byte)len;
+                if (len > 0)
+                    Buffer.BlockCopy(val, 0, data, pos, len); pos += len;
+            }
+            if (count > 0)
+            {
+                data[countpos] = (byte)count;
+                buf.DataLength = pos;
+                //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
+            }
         }
 
         public void SendGroupActiveProposals(UUID groupID, UUID transactionID, GroupActiveProposals[] Proposals)
@@ -1313,7 +1555,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         data[9] = (byte)(datasize >> 8);
 
                         buf.DataLength = bitpack.BytePos + 1;
-                        m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land, null, false, false);
+                        m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land);
 
                         // start another
                         buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
@@ -1341,7 +1583,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 data[9] = (byte)(datasize >> 8);
 
                 buf.DataLength = bitpack.BytePos + 1;
-                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land, null, false, false);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land);
 
             }
             catch (Exception e)
@@ -1622,7 +1864,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
                     buf.DataLength = lastpos;
                     // send it
-                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land, null, false, false);
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land);
 
                     buf = newbuf;
                     data = buf.Data;
@@ -1638,7 +1880,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 data[countpos] = (byte)count;
 
                 buf.DataLength = pos;
-                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land, null, false, false);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land);
             }
         }
 
@@ -1734,7 +1976,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
                     buf.DataLength = lastpos;
                     // send it
-                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land, null, false, false);
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land);
 
                     buf = newbuf;
                     data = buf.Data;
@@ -1763,7 +2005,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     data[pos++] = 0;
 
                 buf.DataLength = pos;
-                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land, null, false, false);
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Land);
             }
         }
 
@@ -1889,19 +2131,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             payPriceReply.ButtonData[3].PayButton = payPrice[4];
 
             OutPacket(payPriceReply, ThrottleOutPacketType.Task);
-        }
-
-        public void SendStartPingCheck(byte seq)
-        {
-            StartPingCheckPacket pc = (StartPingCheckPacket)PacketPool.Instance.GetPacket(PacketType.StartPingCheck);
-            pc.Header.Reliable = false;
-
-            pc.PingID.PingID = seq;
-            // We *could* get OldestUnacked, but it would hurt performance and not provide any benefit
-            pc.PingID.OldestUnacked = 0;
-
-            OutPacket(pc, ThrottleOutPacketType.Unknown);
-            UDPClient.m_lastStartpingTimeMS = Util.EnvironmentTickCount();
         }
 
         public void SendKillObject(List<uint> localIDs)
@@ -2495,34 +2724,89 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             OutPacket(scriptcontrol, ThrottleOutPacketType.Task);
         }
 
+        static private readonly byte[] ReplyTaskInventoryHeader = new byte[] {
+                Helpers.MSG_RELIABLE, //| Helpers.MSG_ZEROCODED, not doing spec zeroencode on this
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 1, 34 // ID 90 (low frequency bigendian)
+                };
+
         public void SendTaskInventory(UUID taskID, short serial, byte[] fileName)
         {
-            ReplyTaskInventoryPacket replytask = (ReplyTaskInventoryPacket)PacketPool.Instance.GetPacket(PacketType.ReplyTaskInventory);
-            replytask.InventoryData.TaskID = taskID;
-            replytask.InventoryData.Serial = serial;
-            replytask.InventoryData.Filename = fileName;
-//            OutPacket(replytask, ThrottleOutPacketType.Task);
-            OutPacket(replytask, ThrottleOutPacketType.Asset);
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
+
+            //setup header
+            Buffer.BlockCopy(ReplyTaskInventoryHeader, 0, data, 0, 10);
+
+            taskID.ToBytes(data, 10); // 26
+            Utils.Int16ToBytes(serial, data, 26); // 28
+            data[28] = (byte)fileName.Length;
+            if(data[28] > 0)
+                Buffer.BlockCopy(fileName, 0, data, 29, data[28]);
+
+            buf.DataLength = 29 + data[28];
+            //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
         }
 
-        public void SendXferPacket(ulong xferID, uint packet, byte[] data, bool isTaskInventory)
+
+        static private readonly byte[] SendXferPacketHeader = new byte[] {
+                Helpers.MSG_RELIABLE,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                18 // ID (high frequency bigendian)
+                };
+
+        public void SendXferPacket(ulong xferID, uint packet, byte[] payload, bool isTaskInventory)
         {
-            ThrottleOutPacketType type = ThrottleOutPacketType.Asset;
-//            if (isTaskInventory)
-//                type = ThrottleOutPacketType.Task;
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
 
-            SendXferPacketPacket sendXfer = (SendXferPacketPacket)PacketPool.Instance.GetPacket(PacketType.SendXferPacket);
-            sendXfer.XferID.ID = xferID;
-            sendXfer.XferID.Packet = packet;
-            sendXfer.DataPacket.Data = data;
-            OutPacket(sendXfer, type);
+            //setup header
+            Buffer.BlockCopy(SendXferPacketHeader, 0, data, 0, 7);
+
+            Utils.UInt64ToBytesSafepos(xferID, data, 7); // 15
+            Utils.UIntToBytesSafepos(packet, data, 15); // 19
+            int len = payload.Length;
+            if (len > LLUDPServer.MAXPAYLOAD) // should never happen
+                len = LLUDPServer.MAXPAYLOAD;
+            if (len == 0)
+            {
+                data[19] = 0;
+                data[20] = 0;
+            }
+            else
+            {
+                data[19] = (byte)len;
+                data[20] = (byte)(len >> 8);
+                Buffer.BlockCopy(payload, 0, data, 21, len);
+            }
+
+            buf.DataLength = 21 + len;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, isTaskInventory ? ThrottleOutPacketType.Task : ThrottleOutPacketType.Asset);
         }
+
+        static private readonly byte[] AbortXferHeader = new byte[] {
+                Helpers.MSG_RELIABLE,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0, 157 // ID 157 (low frequency bigendian)
+                };
 
         public void SendAbortXferPacket(ulong xferID)
         {
-            AbortXferPacket xferItem = (AbortXferPacket)PacketPool.Instance.GetPacket(PacketType.AbortXfer);
-            xferItem.XferID.ID = xferID;
-            OutPacket(xferItem, ThrottleOutPacketType.Asset);
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
+
+            //setup header
+            Buffer.BlockCopy(AbortXferHeader, 0, data, 0, 10);
+
+            Utils.UInt64ToBytesSafepos(xferID, data, 10); // 18
+            Utils.IntToBytesSafepos(0, data, 18); // 22  reason TODO
+
+            buf.DataLength = 22;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Asset);
         }
 
         public void SendEconomyData(float EnergyEfficiency, int ObjectCapacity, int ObjectCount, int PriceEnergyUnit,
@@ -3995,96 +4279,54 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             OutPacket(aw, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
         }
 
-        public void SendAppearance(UUID agentID, byte[] visualParams, byte[] textureEntry)
+        static private readonly byte[] AvatarAppearanceHeader = new byte[] {
+                Helpers.MSG_RELIABLE | Helpers.MSG_ZEROCODED,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0, 158 // ID 158 (low frequency bigendian) not zeroencoded
+                //0xff, 0xff, 0, 1, 158 // ID 158 (low frequency bigendian) zeroencoded
+                };
+
+        public void SendAppearance(UUID targetID, byte[] visualParams, byte[] textureEntry)
         {
-//            m_log.DebugFormat(
-//                "[LLCLIENTVIEW]: Sending avatar appearance for {0} with {1} bytes to {2} {3}",
-//                agentID, textureEntry.Length, Name, AgentId);
+            // doing post zero encode, because odds of beeing bad are not that low
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            Buffer.BlockCopy(AvatarAppearanceHeader, 0, buf.Data, 0, 10);
+            byte[] data = buf.Data;
+            int pos = 10;
 
-            AvatarAppearancePacket avp = (AvatarAppearancePacket)PacketPool.Instance.GetPacket(PacketType.AvatarAppearance);
-            // TODO: don't create new blocks if recycling an old packet
-            avp.VisualParam = new AvatarAppearancePacket.VisualParamBlock[visualParams.Length];
-            avp.ObjectData.TextureEntry = textureEntry;
+            //sender block
+            targetID.ToBytes(data, pos); pos += 16;
+            data[pos++] = 0;// is trial = false
 
-            AvatarAppearancePacket.VisualParamBlock avblock = null;
-            for (int i = 0; i < visualParams.Length; i++)
+            // objectdata block ie texture
+            int len = textureEntry.Length;
+            if (len == 0)
             {
-                avblock = new AvatarAppearancePacket.VisualParamBlock();
-                avblock.ParamValue = visualParams[i];
-                avp.VisualParam[i] = avblock;
-            }
-
-            avp.Sender.IsTrial = false;
-            avp.Sender.ID = agentID;
-            avp.AppearanceData = new AvatarAppearancePacket.AppearanceDataBlock[0];
-            avp.AppearanceHover = new AvatarAppearancePacket.AppearanceHoverBlock[0];
-
-// this need be use in future ?
-//           avp.AppearanceData[0].AppearanceVersion = 0;
-//           avp.AppearanceData[0].CofVersion = 0;
-
-            //m_log.DebugFormat("[CLIENT]: Sending appearance for {0} to {1}", agentID.ToString(), AgentId.ToString());
-            OutPacket(avp, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
-        }
-
-/*
-        public void SendAnimations(UUID[] animations, int[] seqs, UUID sourceAgentId, UUID[] objectIDs)
-        {
-//            m_log.DebugFormat("[LLCLIENTVIEW]: Sending animations for {0} to {1}", sourceAgentId, Name);
-
-            AvatarAnimationPacket ani = (AvatarAnimationPacket)PacketPool.Instance.GetPacket(PacketType.AvatarAnimation);
-            // TODO: don't create new blocks if recycling an old packet
-            ani.Sender = new AvatarAnimationPacket.SenderBlock();
-            ani.Sender.ID = sourceAgentId;
-            ani.AnimationList = new AvatarAnimationPacket.AnimationListBlock[animations.Length];
-            ani.PhysicalAvatarEventList = new AvatarAnimationPacket.PhysicalAvatarEventListBlock[0];
-
-            //self animations
-            if (sourceAgentId == AgentId)
-            {
-                List<int> withobjects = new List<int>(animations.Length);
-                List<int> noobjects = new List<int>(animations.Length);
-                for(int i = 0; i < animations.Length; ++i)
-                {
-                    if(objectIDs[i] == sourceAgentId || objectIDs[i] == UUID.Zero)
-                        noobjects.Add(i);
-                    else
-                        withobjects.Add(i);
-                }
-
-                ani.AnimationSourceList = new AvatarAnimationPacket.AnimationSourceListBlock[withobjects.Count];
-                int k = 0;
-                foreach (int i in withobjects)
-                {
-                    ani.AnimationList[k] = new AvatarAnimationPacket.AnimationListBlock();
-                    ani.AnimationList[k].AnimID = animations[i];
-                    ani.AnimationList[k].AnimSequenceID = seqs[i];
-                    ani.AnimationSourceList[k] = new AvatarAnimationPacket.AnimationSourceListBlock();
-                    ani.AnimationSourceList[k].ObjectID = objectIDs[i];
-                    k++;
-                }
-                foreach (int i in noobjects)
-                {
-                    ani.AnimationList[k] = new AvatarAnimationPacket.AnimationListBlock();
-                    ani.AnimationList[k].AnimID = animations[i];
-                    ani.AnimationList[k].AnimSequenceID = seqs[i];
-                    k++;
-                }
+                data[pos++] = 0;
+                data[pos++] = 0;
             }
             else
             {
-                ani.AnimationSourceList = new AvatarAnimationPacket.AnimationSourceListBlock[0];
-                for (int i = 0; i < animations.Length; ++i)
-                {
-                    ani.AnimationList[i] = new AvatarAnimationPacket.AnimationListBlock();
-                    ani.AnimationList[i].AnimID = animations[i];
-                    ani.AnimationList[i].AnimSequenceID = seqs[i];
-                }
+                data[pos++] = (byte)len;
+                data[pos++] = (byte)(len >> 8);
+                Buffer.BlockCopy(textureEntry, 0, data, pos, len); pos += len;
             }
 
-            OutPacket(ani, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
+            // visual parameters
+            len = visualParams.Length;
+            data[pos++] = (byte)len;
+            if(len > 0)
+                Buffer.BlockCopy(visualParams, 0, data, pos, len); pos += len;
+
+            // no AppearanceData
+            data[pos++] = 0;
+            // no AppearanceHover
+            data[pos++] = 0;
+
+            buf.DataLength = pos;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority, null, false, true);
         }
-*/
 
         static private readonly byte[] AvatarAnimationHeader = new byte[] {
                 Helpers.MSG_RELIABLE,
@@ -4154,8 +4396,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             data[pos++] = 0; // no physical avatar events
 
             buf.DataLength = pos;
-            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority,
-                       null, false, false);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
         }
 
         public void SendObjectAnimations(UUID[] animations, int[] seqs, UUID senderId)
@@ -4212,43 +4453,42 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 CreatePrimUpdateBlock(ent as SceneObjectPart, (ScenePresence)SceneAgent, zc);
 
             buf.DataLength = zc.Finish();
-            m_udpServer.SendUDPPacket(m_udpClient, buf, ptype , null, false, false);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ptype);
         }
 
         public void SendEntityTerseUpdateImmediate(ISceneEntity ent)
         {
-//            m_log.DebugFormat(
-//                "[LLCLIENTVIEW]: Sending immediate object update for avatar {0} {1} to {2} {3}",
-//                avatar.Name, avatar.UUID, Name, AgentId);
-
             if (ent == null)
                 return;
 
-            ImprovedTerseObjectUpdatePacket objupdate =
-                (ImprovedTerseObjectUpdatePacket)PacketPool.Instance.GetPacket(PacketType.ImprovedTerseObjectUpdate);
-            objupdate.Header.Zerocoded = true;
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
 
-            objupdate.RegionData.TimeDilation = Utils.FloatToUInt16(m_scene.TimeDilation, 0.0f, 1.0f);
-            objupdate.ObjectData = new ImprovedTerseObjectUpdatePacket.ObjectDataBlock[1];
+            //setup header and regioninfo block
+            Buffer.BlockCopy(terseUpdateHeader, 0, buf.Data, 0, 7);
+            if (ent is ScenePresence)
+                Utils.UInt64ToBytesSafepos(((ScenePresence)ent).RegionHandle, buf.Data, 7);
+            else
+                Utils.UInt64ToBytesSafepos(m_scene.RegionInfo.RegionHandle, buf.Data, 7);
 
-            if(ent is ScenePresence)
-            {
-                ScenePresence presence = ent as ScenePresence;
-                objupdate.RegionData.RegionHandle = presence.RegionHandle;
-                objupdate.ObjectData[0] = CreateImprovedTerseBlock(ent);
-            }
-            else if(ent is SceneObjectPart)
-            {
-                SceneObjectPart part = ent  as SceneObjectPart;
-                objupdate.RegionData.RegionHandle = m_scene.RegionInfo.RegionHandle;
-                objupdate.ObjectData[0] = CreateImprovedTerseBlock(ent);
-            }
+            Utils.UInt16ToBytes(Utils.FloatToUInt16(m_scene.TimeDilation, 0.0f, 1.0f), buf.Data, 15);
+            buf.Data[17] = 1;
 
-            OutPacket(objupdate, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
+            int pos = 18;
+            CreateImprovedTerseBlock(ent, buf.Data, ref pos, false);
 
-            // We need to record the avatar local id since the root prim of an attachment points to this.
-//            m_attachmentsSent.Add(avatar.LocalId);
+            buf.DataLength = pos;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
         }
+
+        //UUID m_courseLocationPrey = UUID.Zero;
+        bool m_couseLocationLastEmpty = false;
+
+        static private readonly byte[] CoarseLocationUpdateHeader = new byte[] {
+                0, // no acks plz
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 6 // ID 6 (medium frequency)
+                };
 
         public void SendCoarseLocationUpdate(List<UUID> users, List<Vector3> CoarseLocations)
         {
@@ -4256,40 +4496,59 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             if (!IsActive)
                 return;
 
-            CoarseLocationUpdatePacket loc = (CoarseLocationUpdatePacket)PacketPool.Instance.GetPacket(PacketType.CoarseLocationUpdate);
-            loc.Header.Reliable = false;
+            int totalLocations = Math.Min(CoarseLocations.Count, 60);
+            if(totalLocations == 0)
+            {
+                if(m_couseLocationLastEmpty)
+                    return;
+                m_couseLocationLastEmpty = true;
+            }
+            else
+                m_couseLocationLastEmpty = false;
 
-            // Each packet can only hold around 60 avatar positions and the client clears the mini-map each time
-            // a CoarseLocationUpdate packet is received. Oh well.
-            int total = Math.Min(CoarseLocations.Count, 60);
-
-            CoarseLocationUpdatePacket.IndexBlock ib = new CoarseLocationUpdatePacket.IndexBlock();
-
-            loc.Location = new CoarseLocationUpdatePacket.LocationBlock[total];
-            loc.AgentData = new CoarseLocationUpdatePacket.AgentDataBlock[total];
+            int totalAgents = Math.Min(users.Count, 60);
+            if(totalAgents > totalLocations)
+                totalAgents = totalLocations;
 
             int selfindex = -1;
-            for (int i = 0; i < total; i++)
+            int preyindex = -1;
+
+            //bool doprey = m_courseLocationPrey != UUID.Zero;
+
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            Buffer.BlockCopy(CoarseLocationUpdateHeader, 0, buf.Data, 0, 8);
+            byte[] data = buf.Data;
+
+            data[8] = (byte)totalLocations;
+            int pos = 9;
+
+            for (int i = 0; i < totalLocations; ++i)
             {
-                CoarseLocationUpdatePacket.LocationBlock lb =
-                    new CoarseLocationUpdatePacket.LocationBlock();
-
-                lb.X = (byte)CoarseLocations[i].X;
-                lb.Y = (byte)CoarseLocations[i].Y;
-
-                lb.Z = CoarseLocations[i].Z > 1024 ? (byte)0 : (byte)(CoarseLocations[i].Z * 0.25f);
-                loc.Location[i] = lb;
-                loc.AgentData[i] = new CoarseLocationUpdatePacket.AgentDataBlock();
-                loc.AgentData[i].AgentID = users[i];
-                if (users[i] == AgentId)
-                    selfindex = i;
+                data[pos++] = (byte)CoarseLocations[i].X;
+                data[pos++] = (byte)CoarseLocations[i].Y;
+                data[pos++] = CoarseLocations[i].Z > 1024 ? (byte)0 : (byte)(CoarseLocations[i].Z * 0.25f);
+                
+                if (i < totalAgents)
+                {
+                    if (users[i] == AgentId)
+                        selfindex = i;
+                    //if (doprey && users[i] == m_courseLocationPrey)
+                    //    preyindex = i;
+                }
             }
 
-            ib.You = (short)selfindex;
-            ib.Prey = -1;
-            loc.Index = ib;
+            Utils.Int16ToBytes((short)selfindex, data, pos); pos += 2;
+            Utils.Int16ToBytes((short)preyindex, data, pos); pos += 2;
 
-            OutPacket(loc, ThrottleOutPacketType.Task);
+            data[pos++] = (byte)totalAgents;
+            for (int i = 0; i < totalAgents; ++i)
+            {
+                users[i].ToBytes(data, pos);
+                pos += 16;
+            }
+
+            buf.DataLength = pos;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
         }
 
         #endregion Avatar Packet/Data Sending Methods
@@ -4302,20 +4561,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         /// </summary>
         public void SendEntityUpdate(ISceneEntity entity, PrimUpdateFlags updateFlags)
         {
-/*
-            if (entity.UUID == m_agentId && !updateFlags.HasFlag(PrimUpdateFlags.FullUpdate))
-            {
-                ImprovedTerseObjectUpdatePacket packet
-                    = (ImprovedTerseObjectUpdatePacket)PacketPool.Instance.GetPacket(PacketType.ImprovedTerseObjectUpdate);
-
-                packet.RegionData.RegionHandle = m_scene.RegionInfo.RegionHandle;
-                packet.RegionData.TimeDilation = Utils.FloatToUInt16(1, 0.0f, 1.0f);
-                packet.ObjectData = new ImprovedTerseObjectUpdatePacket.ObjectDataBlock[1];
-                packet.ObjectData[0] = CreateImprovedTerseBlock(entity, false);
-                OutPacket(packet, ThrottleOutPacketType.Unknown, true);
-                return;
-            }
-*/
             if (entity is SceneObjectPart)
             {
                 SceneObjectPart p = (SceneObjectPart)entity;
@@ -4334,7 +4579,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 }
             }
 
-            //double priority = m_prioritizer.GetUpdatePriority(this, entity);
             uint priority = m_prioritizer.GetUpdatePriority(this, entity);
 
             lock (m_entityUpdates.SyncRoot)
@@ -5361,7 +5605,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
                         //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
                         //    delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
-                        m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, false);
+                        m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
                         buf = newbuf;
                         zc.Data = buf.Data;
                         zc.ZeroCount = 0;
@@ -5382,7 +5626,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     buf.DataLength = zc.Finish();
                     //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
                     //    delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
-                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, false);
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
                 }
             }
 
@@ -5402,7 +5646,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     //tau.Add(new ObjectPropertyUpdate((ISceneEntity) eu, (uint)eu.Flags, true, false));
                     //m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
                     //    delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
-                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, false);
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
                 }
             }
 
@@ -5989,121 +6233,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 v.Y *= a;
                 v.Z *= a;
             }
-        }
-
-        protected ImprovedTerseObjectUpdatePacket.ObjectDataBlock CreateImprovedTerseBlock(ISceneEntity entity)
-        {
-            #region ScenePresence/SOP Handling
-
-            bool avatar = (entity is ScenePresence);
-            uint localID = entity.LocalId;
-            uint attachPoint;
-            Vector4 collisionPlane;
-            Vector3 position, velocity, acceleration, angularVelocity;
-            Quaternion rotation;
-
-            if (avatar)
-            {
-                ScenePresence presence = (ScenePresence)entity;
-
-                position = presence.OffsetPosition;
-                velocity = presence.Velocity;
-                acceleration = Vector3.Zero;
-                rotation = presence.Rotation;
-                // tpvs can only see rotations around Z in some cases
-                if(!presence.Flying && !presence.IsSatOnObject)
-                {
-                    rotation.X = 0f;
-                    rotation.Y = 0f;
-                }
-                rotation.Normalize();
-                angularVelocity = presence.AngularVelocity;
-
-//                m_log.DebugFormat(
-//                    "[LLCLIENTVIEW]: Sending terse update to {0} with position {1} in {2}", Name, presence.OffsetPosition, m_scene.Name);
-
-                attachPoint = presence.State;
-                collisionPlane = presence.CollisionPlane;
-            }
-            else
-            {
-                SceneObjectPart part = (SceneObjectPart)entity;
-
-                attachPoint = part.ParentGroup.AttachmentPoint;
-                attachPoint = ((attachPoint % 16) * 16 + (attachPoint / 16));
-//                m_log.DebugFormat(
-//                    "[LLCLIENTVIEW]: Sending attachPoint {0} for {1} {2} to {3}",
-//                    attachPoint, part.Name, part.LocalId, Name);
-
-                collisionPlane = Vector4.Zero;
-                position = part.RelativePosition;
-                velocity = part.Velocity;
-                acceleration = part.Acceleration;
-                angularVelocity = part.AngularVelocity;
-                rotation = part.RotationOffset;
-            }
-
-            #endregion ScenePresence/SOP Handling
-
-            int pos = 0;
-            byte[] data = new byte[(avatar ? 60 : 44)];
-
-            // LocalID
-            Utils.UIntToBytes(localID, data, pos);
-            pos += 4;
-
-            // Avatar/CollisionPlane
-            data[pos++] = (byte) attachPoint;
-            if (avatar)
-            {
-                data[pos++] = 1;
-
-                if (collisionPlane == Vector4.Zero)
-                    collisionPlane = Vector4.UnitW;
-                //m_log.DebugFormat("CollisionPlane: {0}",collisionPlane);
-                collisionPlane.ToBytes(data, pos);
-                pos += 16;
-            }
-            else
-            {
-                ++pos;
-            }
-
-            // Position
-            position.ToBytes(data, pos);
-            pos += 12;
-
-            // Velocity
-            ClampVectorForUint(ref velocity, 128f);
-            Utils.FloatToUInt16Bytes(velocity.X, 128.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(velocity.Y, 128.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(velocity.Z, 128.0f, data, pos); pos += 2;
-
-            // Acceleration
-            ClampVectorForUint(ref acceleration, 64f);
-            Utils.FloatToUInt16Bytes(acceleration.X, 64.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(acceleration.Y, 64.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(acceleration.Z, 64.0f, data, pos); pos += 2;
-
-            // Rotation
-            Utils.FloatToUInt16Bytes(rotation.X, 1.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(rotation.Y, 1.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(rotation.Z, 1.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(rotation.W, 1.0f, data, pos); pos += 2;
-
-            // Angular Velocity
-            ClampVectorForUint(ref angularVelocity, 64f);
-            Utils.FloatToUInt16Bytes(angularVelocity.X, 64.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(angularVelocity.Y, 64.0f, data, pos); pos += 2;
-            Utils.FloatToUInt16Bytes(angularVelocity.Z, 64.0f, data, pos); pos += 2;
-
-            ImprovedTerseObjectUpdatePacket.ObjectDataBlock block
-                    = new ImprovedTerseObjectUpdatePacket.ObjectDataBlock();
-
-            block.Data = data;
-            block.TextureEntry = Utils.EmptyBytes;
-
-            return block;
         }
 
         protected void CreateImprovedTerseBlock(ISceneEntity entity, byte[] data, ref int pos, bool includeTexture)
@@ -7700,15 +7829,19 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             TrackAgentPacket TrackAgent =
                 (TrackAgentPacket)Packet;
 
+            if(TrackAgent.AgentData.AgentID != AgentId || TrackAgent.AgentData.SessionID != SessionId)
+                return false;
+
             TrackAgentUpdate TrackAgentHandler = OnTrackAgent;
             if (TrackAgentHandler != null)
             {
                 TrackAgentHandler(this,
                                   TrackAgent.AgentData.AgentID,
                                   TrackAgent.TargetData.PreyID);
-                return true;
             }
-            return false;
+//            else
+//                m_courseLocationPrey = TrackAgent.TargetData.PreyID;
+            return true;
         }
 
         private bool HandlerRezObject(IClientAPI sender, Packet Pack)
@@ -8389,7 +8522,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         private bool HandleAgentResume(IClientAPI sender, Packet Pack)
         {
             m_udpClient.IsPaused = false;
-            SendStartPingCheck(m_udpClient.CurrentPingSequence++);
+            m_udpServer.SendPing(m_udpClient);
             return true;
         }
 
@@ -14027,38 +14160,18 @@ namespace OpenSim.Region.ClientStack.LindenUDP
         {
             if (p is ScenePresence)
             {
-//                m_log.DebugFormat(
-//                    "[LLCLIENTVIEW]: Immediately sending terse agent update for {0} to {1} in {2}",
-//                    p.Name, Name, Scene.Name);
+                UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
 
-                // It turns out to get the agent to stop flying, you have to feed it stop flying velocities
-                // There's no explicit message to send the client to tell it to stop flying..   it relies on the
-                // velocity, collision plane and avatar height
-
-                // Add 1/6 the avatar's height to it's position so it doesn't shoot into the air
-                // when the avatar stands up
-
-                ImprovedTerseObjectUpdatePacket.ObjectDataBlock block =
-                    CreateImprovedTerseBlock(p);
-
-//                const float TIME_DILATION = 1.0f;
-                ushort timeDilation = Utils.FloatToUInt16(m_scene.TimeDilation, 0.0f, 1.0f);;
-
-                ImprovedTerseObjectUpdatePacket packet
-                    = (ImprovedTerseObjectUpdatePacket)PacketPool.Instance.GetPacket(
-                        PacketType.ImprovedTerseObjectUpdate);
-
-                packet.RegionData.RegionHandle = m_scene.RegionInfo.RegionHandle;
-                packet.RegionData.TimeDilation = timeDilation;
-                packet.ObjectData = new ImprovedTerseObjectUpdatePacket.ObjectDataBlock[1];
-
-                packet.ObjectData[0] = block;
-
-                OutPacket(packet, ThrottleOutPacketType.Task, true);
+                //setup header and regioninfo block
+                Buffer.BlockCopy(terseUpdateHeader, 0, buf.Data, 0, 7);
+                Utils.UInt64ToBytesSafepos(m_scene.RegionInfo.RegionHandle, buf.Data, 7);
+                Utils.UInt16ToBytes(Utils.FloatToUInt16(m_scene.TimeDilation, 0.0f, 1.0f), buf.Data, 15);
+                buf.Data[17] = 1;
+                int pos = 18;
+                CreateImprovedTerseBlock(p, buf.Data, ref pos, false);
+                buf.DataLength = pos;
+                m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, false, true);
             }
-
-            //ControllingClient.SendAvatarTerseUpdate(new SendAvatarTerseData(m_rootRegionHandle, (ushort)(m_scene.TimeDilation * ushort.MaxValue), LocalId,
-            //        AbsolutePosition, Velocity, Vector3.Zero, m_bodyRot, new Vector4(0,0,1,AbsolutePosition.Z - 0.5f), m_uuid, null, GetUpdatePriority(ControllingClient)));
         }
 
         public void SendPlacesReply(UUID queryID, UUID transactionID,
