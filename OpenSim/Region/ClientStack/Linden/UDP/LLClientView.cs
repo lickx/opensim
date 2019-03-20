@@ -4641,6 +4641,13 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 15 // ID (high frequency)
                 };
 
+        static private readonly byte[] ObjectAnimationHeader = new byte[] {
+                Helpers.MSG_RELIABLE,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                30 // ID (high frequency)
+                };
+
         private void ProcessEntityUpdates(int maxUpdatesBytes)
         {
             if (!IsActive)
@@ -5084,6 +5091,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 {
                     if (sop.Animations == null)
                         continue;
+
                     SceneObjectGroup sog = sop.ParentGroup;
                     if (sog == null || sog.IsDeleted)
                         continue;
@@ -5096,18 +5104,30 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     int[] seqs = null;
                     int count = sop.GetAnimations(out ids, out seqs);
 
-                    ObjectAnimationPacket ani = (ObjectAnimationPacket)PacketPool.Instance.GetPacket(PacketType.ObjectAnimation);
-                    ani.Sender = new ObjectAnimationPacket.SenderBlock();
-                    ani.Sender.ID = sop.UUID;
-                    ani.AnimationList = new ObjectAnimationPacket.AnimationListBlock[count];
+                    UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+                    byte[] data = buf.Data;
 
-                    for(int i = 0; i< count; i++)
+                    //setup header
+                    Buffer.BlockCopy(ObjectAnimationHeader, 0, data , 0, 7);
+
+                    // sender block
+                    sop.UUID.ToBytes(data, 7); // 23
+
+                    //animations block
+                    if (count > 255)
+                        count = 255;
+
+                    data[23] = (byte)count;
+
+                    int pos = 24;
+                    for(int i = 0; i < count; i++)
                     {
-                        ani.AnimationList[i] = new ObjectAnimationPacket.AnimationListBlock();
-                        ani.AnimationList[i].AnimID = ids[i];
-                        ani.AnimationList[i].AnimSequenceID = seqs[i];
+                        ids[i].ToBytes(data, pos); pos += 16;
+                        Utils.IntToBytesSafepos(seqs[i], data, pos); pos += 4;
                     }
-                    OutPacket(ani, ThrottleOutPacketType.Task, true);
+
+                    buf.DataLength = pos;
+                    m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
                 }
             }
 
@@ -5412,20 +5432,47 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             OutPacket(PacketPool.Instance.GetPacket(PacketType.DisableSimulator), ThrottleOutPacketType.Unknown);
         }
 
+        static private readonly byte[] SimStatsHeader = new byte[] {
+                0,
+                0, 0, 0, 0, // sequence number
+                0, // extra
+                0xff, 0xff, 0, 140 // ID 140 (low frequency bigendian)
+                };
+
         public void SendSimStats(SimStats stats)
         {
-            SimStatsPacket pack = new SimStatsPacket();
-            pack.Region = new SimStatsPacket.RegionBlock();
-            pack.Region.RegionX = stats.RegionX;
-            pack.Region.RegionY = stats.RegionY;
-            pack.Region.RegionFlags = stats.RegionFlags;
-            pack.Region.ObjectCapacity = stats.ObjectCapacity;
-            //pack.Region = //stats.RegionBlock;
-            pack.Stat = stats.StatsBlock;
+            UDPPacketBuffer buf = m_udpServer.GetNewUDPBuffer(m_udpClient.RemoteEndPoint);
+            byte[] data = buf.Data;
 
-            pack.Header.Reliable = false;
-            pack.RegionInfo = new SimStatsPacket.RegionInfoBlock[0];
-            OutPacket(pack, ThrottleOutPacketType.Task);
+            //setup header
+            Buffer.BlockCopy(SimStatsHeader, 0, data, 0, 10);
+
+            // Region Block
+            Utils.UIntToBytesSafepos(stats.RegionX, data, 10);
+            Utils.UIntToBytesSafepos(stats.RegionY, data, 14);
+            Utils.UIntToBytesSafepos(stats.RegionFlags, data, 18);
+            Utils.UIntToBytesSafepos(stats.ObjectCapacity, data, 22); // 26
+
+            // stats
+            data[26] = (byte)stats.StatsBlock.Length;
+            int pos = 27;
+
+            stats.StatsBlock[15].StatValue /= 1024; // unack is in KB
+            for (int i = 0; i< stats.StatsBlock.Length; ++i)
+            {
+                Utils.UIntToBytesSafepos(stats.StatsBlock[i].StatID, data, pos); pos += 4;
+                Utils.FloatToBytesSafepos(stats.StatsBlock[i].StatValue, data, pos); pos += 4;
+            }
+
+            //no PID
+            Utils.IntToBytesSafepos(0, data, pos); pos += 4;
+
+            // no regioninfo (extended flags)
+            data[pos++] = 0; // = 1;
+            //Utils.UInt64ToBytesSafepos(RegionFlagsExtended, data, pos); pos += 8;
+
+            buf.DataLength = pos;
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
         }
 
         private class ObjectPropertyUpdate : EntityUpdate
