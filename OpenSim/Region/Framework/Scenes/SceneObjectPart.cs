@@ -312,7 +312,6 @@ namespace OpenSim.Region.Framework.Scenes
         private Quaternion m_sitTargetOrientation = Quaternion.Identity;
         private Vector3 m_sitTargetPosition;
         private string m_sitAnimation = "SIT";
-        private bool m_occupied;					// KF if any av is sitting on this prim
         private string m_text = String.Empty;
         private string m_touchName = String.Empty;
         private UndoRedoState m_UndoRedo = null;
@@ -1179,9 +1178,10 @@ namespace OpenSim.Region.Framework.Scenes
 
             set
             {
+                string old = m_mediaUrl;
                 m_mediaUrl = value;
 
-                if (ParentGroup != null)
+                if (ParentGroup != null && old != m_mediaUrl)
                     ParentGroup.HasGroupChanged = true;
             }
         }
@@ -1383,13 +1383,6 @@ namespace OpenSim.Region.Framework.Scenes
 //                m_log.DebugFormat("[SOP]: Setting flags for {0} {1} to {2}", UUID, Name, value);
                 _flags = value;
             }
-        }
-
-        [XmlIgnore]
-        public bool IsOccupied				// KF If an av is sittingon this prim
-        {
-            get { return m_occupied; }
-            set { m_occupied = value; }
         }
 
         /// <summary>
@@ -2472,12 +2465,6 @@ namespace OpenSim.Region.Framework.Scenes
 
         public uint GetEffectiveObjectFlags()
         {
-            // Commenting this section of code out since it doesn't actually do anything, as enums are handled by
-            // value rather than reference
-//            PrimFlags f = _flags;
-//            if (m_parentGroup == null || m_parentGroup.RootPart == this)
-//                f &= ~(PrimFlags.Touch | PrimFlags.Money);
-
             uint eff = (uint)Flags | (uint)LocalFlags;
             if(m_inventory == null || m_inventory.Count == 0)
                 eff |= (uint)PrimFlags.InventoryEmpty;
@@ -3896,15 +3883,15 @@ namespace OpenSim.Region.Framework.Scenes
         {
             if (Shape.SculptEntry && !ignoreSculpt)
                 return PrimType.SCULPT;
-
-            if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.Square)
+            ProfileShape ps = (ProfileShape)(Shape.ProfileCurve & 0x07);
+            if (ps == ProfileShape.Square)
             {
                 if (Shape.PathCurve == (byte)Extrusion.Straight)
                     return PrimType.BOX;
                 else if (Shape.PathCurve == (byte)Extrusion.Curve1)
                     return PrimType.TUBE;
             }
-            else if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.Circle)
+            else if (ps == ProfileShape.Circle)
             {
                 if (Shape.PathCurve == (byte)Extrusion.Straight || Shape.PathCurve == (byte)Extrusion.Flexible)
                     return PrimType.CYLINDER;
@@ -3912,12 +3899,12 @@ namespace OpenSim.Region.Framework.Scenes
                 else if (Shape.PathCurve == (byte)Extrusion.Curve1)
                     return PrimType.TORUS;
             }
-            else if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.HalfCircle)
+            else if (ps == ProfileShape.HalfCircle)
             {
                 if (Shape.PathCurve == (byte)Extrusion.Curve1 || Shape.PathCurve == (byte)Extrusion.Curve2)
                     return PrimType.SPHERE;
             }
-            else if ((Shape.ProfileCurve & 0x07) == (byte)ProfileShape.EquilateralTriangle)
+            else if (ps == ProfileShape.EquilateralTriangle)
             {
                 if (Shape.PathCurve == (byte)Extrusion.Straight || Shape.PathCurve == (byte)Extrusion.Flexible)
                     return PrimType.PRISM;
@@ -5137,7 +5124,13 @@ namespace OpenSim.Region.Framework.Scenes
 
             if (changeFlags == 0)
                 return;
-            m_shape.TextureEntry = newTex.GetBytes(9);
+            // we do need better compacter do just the trivial case
+            if(nsides == 1 && newTex.FaceTextures[0] != null)
+            {
+                newTex.DefaultTexture = newTex.GetFace(0);
+                newTex.FaceTextures[0] = null;
+            }
+            m_shape.TextureEntry = newTex.GetBytes(nsides);
             TriggerScriptChangedEvent(changeFlags);
             ParentGroup.HasGroupChanged = true;
             ScheduleUpdate(PrimUpdateFlags.Textures);

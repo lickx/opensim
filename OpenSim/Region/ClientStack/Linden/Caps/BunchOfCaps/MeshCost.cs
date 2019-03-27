@@ -129,6 +129,7 @@ namespace OpenSim.Region.ClientStack.Linden
             public int medLODSize;
             public int lowLODSize;
             public int lowestLODSize;
+            public int highLODsides;
             // normalized fee based on compressed data sizes
             public float costFee;
             // physics cost
@@ -144,11 +145,11 @@ namespace OpenSim.Region.ClientStack.Linden
         // avatarSkeleton if mesh includes a avatar skeleton
         // useAvatarCollider if we should use physics mesh for avatar
         public bool MeshModelCost(LLSDAssetResource resources, int basicCost, out int totalcost,
-            LLSDAssetUploadResponseData meshcostdata, out string error, ref string warning)
+            LLSDAssetUploadResponseData meshcostdata, out string error, ref string warning, out int[] meshesSides)
         {
             totalcost = 0;
             error = string.Empty;
-
+            meshesSides = null;
             bool avatarSkeleton = false;
 
             if (resources == null ||
@@ -203,13 +204,14 @@ namespace OpenSim.Region.ClientStack.Linden
             if (resources.mesh_list != null && resources.mesh_list.Array.Count > 0)
             {
                 numberMeshs = resources.mesh_list.Array.Count;
+                meshesSides = new int[numberMeshs];
 
                 for (int i = 0; i < numberMeshs; i++)
                 {
                     ameshCostParam curCost = new ameshCostParam();
                     byte[] data = (byte[])resources.mesh_list.Array[i];
 
-                    if (!MeshCost(data, curCost,out curskeleton, out curAvatarPhys, out error))
+                    if (!MeshCost(data, curCost, out curskeleton, out curAvatarPhys, out error))
                     {
                         return false;
                     }
@@ -225,6 +227,7 @@ namespace OpenSim.Region.ClientStack.Linden
                     }
                     meshsCosts.Add(curCost);
                     meshsfee += curCost.costFee;
+                    meshesSides[i] = curCost.highLODsides;
                 }
                 haveMeshs = true;
             }
@@ -275,6 +278,7 @@ namespace OpenSim.Region.ClientStack.Linden
                     float sqdiam = scale.LengthSquared();
 
                     ameshCostParam curCost = meshsCosts[mesh];
+
                     float mesh_streaming = streamingCost(curCost, sqdiam);
 
                     meshcostdata.model_streaming_cost += mesh_streaming;
@@ -339,6 +343,7 @@ namespace OpenSim.Region.ClientStack.Linden
         private bool MeshCost(byte[] data, ameshCostParam cost,out bool skeleton, out bool avatarPhys, out string error)
         {
             cost.highLODSize = 0;
+            cost.highLODsides = 0;
             cost.medLODSize = 0;
             cost.lowLODSize = 0;
             cost.lowestLODSize = 0;
@@ -430,7 +435,8 @@ namespace OpenSim.Region.ClientStack.Linden
 
             submesh_offset = -1;
 
-            // only look for LOD meshs sizes
+            int nsides = 0;
+            int lod_ntriangles = 0;
 
             if (map.ContainsKey("high_lod"))
             {
@@ -440,6 +446,15 @@ namespace OpenSim.Region.ClientStack.Linden
                     submesh_offset = tmpmap["offset"].AsInteger() + start;
                 if (tmpmap.ContainsKey("size"))
                     highlod_size = tmpmap["size"].AsInteger();
+
+                if (submesh_offset >= 0 && highlod_size > 0)
+                {
+                    if (!submesh(data, submesh_offset, highlod_size, out lod_ntriangles, out nsides))
+                    {
+                        error = "Model data parsing error";
+                        return false;
+                    }
+                }
             }
 
             if (submesh_offset < 0 || highlod_size <= 0)
@@ -483,6 +498,7 @@ namespace OpenSim.Region.ClientStack.Linden
             }
 
             cost.highLODSize = highlod_size;
+            cost.highLODsides = nsides;
             cost.medLODSize = medlod_size;
             cost.lowLODSize = lowlod_size;
             cost.lowestLODSize = lowestlod_size;
@@ -495,6 +511,7 @@ namespace OpenSim.Region.ClientStack.Linden
             else if (map.ContainsKey("physics_shape")) // old naming
                 tmpmap = (OSDMap)map["physics_shape"];
 
+            int phys_nsides = 0;
             if(tmpmap != null)
             {
                 if (tmpmap.ContainsKey("offset"))
@@ -502,10 +519,9 @@ namespace OpenSim.Region.ClientStack.Linden
                 if (tmpmap.ContainsKey("size"))
                     physmesh_size = tmpmap["size"].AsInteger();
 
-                if (submesh_offset >= 0 || physmesh_size > 0)
+                if (submesh_offset >= 0 && physmesh_size > 0)
                 {
-
-                    if (!submesh(data, submesh_offset, physmesh_size, out phys_ntriangles))
+                    if (!submesh(data, submesh_offset, physmesh_size, out phys_ntriangles, out phys_nsides))
                     {
                         error = "Model data parsing error";
                         return false;
@@ -541,9 +557,10 @@ namespace OpenSim.Region.ClientStack.Linden
         }
 
         // parses a LOD or physics mesh component
-        private bool submesh(byte[] data, int offset, int size, out int ntriangles)
+        private bool submesh(byte[] data, int offset, int size, out int ntriangles, out int nsides)
         {
             ntriangles = 0;
+            nsides = 0;
 
             OSD decodedMeshOsd = new OSD();
             byte[] meshBytes = new byte[size];
@@ -599,6 +616,7 @@ namespace OpenSim.Region.ClientStack.Linden
                     }
                     else
                         return false;
+                    nsides++;
                 }
             }
 
