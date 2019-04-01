@@ -1163,7 +1163,10 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
                 return;
             }
 
-            m_entityTransferStateMachine.UpdateInTransit(sp.UUID, AgentTransferState.CleaningUp);
+            //shut this up for now
+            m_entityTransferStateMachine.ResetFromTransit(sp.UUID);
+
+            //m_entityTransferStateMachine.UpdateInTransit(sp.UUID, AgentTransferState.CleaningUp);
 
             sp.HasMovedAway(!(OutSideViewRange || logout));
 
@@ -1181,6 +1184,7 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
                     sp.CloseChildAgents(childRegionsToClose);
             }
 
+
             // if far jump we do need to close anyways
             if (NeedsClosing(reg, OutSideViewRange))
             {
@@ -1190,12 +1194,15 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
                     Thread.Sleep(250);
                     if(sp.IsDeleted)
                         return;
+                    if(!sp.IsInTransit)
+                        break;
                 } while (--count > 0);
+
 
                 if (!sp.IsDeleted)
                 {
                     m_log.DebugFormat(
-                        "[ENTITY TRANSFER MODULE]: Closing agent {0} in {1} after teleport timeout", sp.Name, Scene.Name);
+                        "[ENTITY TRANSFER MODULE]: Closing agent {0} in {1} after teleport {2}", sp.Name, Scene.Name, sp.IsInTransit?"timeout":"");
                     sp.Scene.CloseAgent(sp.UUID, false);
                 }
                 return;
@@ -1283,7 +1290,7 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
             m_log.DebugFormat(
                 "[ENTITY TRANSFER MODULE]: Set release callback URL to {0} in {1}",
-                agent.CallbackURI, region.RegionName);
+                agent.NewCallbackURI, region.RegionName);
         }
 
         /// <summary>
@@ -2460,8 +2467,8 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             if(sp == null || sp.IsDeleted || !sp.IsInTransit)
                 return;
 
-            Scene.CloseAgent(sp.UUID, false);
-            m_entityTransferStateMachine.ResetFromTransit(id); // this needs cleanup
+            //Scene.CloseAgent(sp.UUID, false);
+            sp.IsInTransit = false;
             //m_entityTransferStateMachine.SetAgentArrivedAtDestination(id);
         }
 
