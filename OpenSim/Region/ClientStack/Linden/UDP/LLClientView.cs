@@ -408,6 +408,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             get { return m_startpos; }
             set { m_startpos = value; }
         }
+        public float StartFar { get; set; }
+
         public bool DeliverPackets
         {
             get { return m_deliverPackets; }
@@ -540,6 +542,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             m_firstName = sessionInfo.LoginInfo.First;
             m_lastName = sessionInfo.LoginInfo.Last;
             m_startpos = sessionInfo.LoginInfo.StartPos;
+            StartFar = sessionInfo.LoginInfo.StartFar;
 
             m_udpServer = udpServer;
             m_udpClient = udpClient;
@@ -926,7 +929,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             //BillableFactor
             zc.AddFloat(es.BillableFactor);
             //CacheID
-            zc.AddUUID(regionInfo.RegionID); // needs review when we actuall support cache
+            zc.AddUUID(regionInfo.CacheID);
             //TerrainBase0
             //TerrainBase1
             //TerrainBase2
@@ -5585,27 +5588,37 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 if (e != null && e is SceneObjectGroup)
                 {
                     SceneObjectGroup grp = (SceneObjectGroup)e;
-                    if(grp.IsDeleted || grp.IsAttachment)
+                    if(grp.IsDeleted || grp.IsAttachment )
                         continue;
 
                     bool inviewgroups;
                     lock (GroupsInView)
                         inviewgroups = GroupsInView.Contains(grp);
 
-                    Vector3 grppos = grp.getCenterOffset();
-                    float dpos = (grppos - mypos).LengthSquared();
-
-                    float maxview = grp.GetBoundsRadius() + cullingrange;
-                    if (dpos > maxview * maxview)
+                    //temp handling of sits
+                    if(grp.GetSittingAvatarsCount() > 0)
                     {
-                        if(inviewgroups)
-                            kills.Add(grp);
+                        if (!inviewgroups)
+                            GroupsNeedFullUpdate.Add(grp);
+                        NewGroupsInView.Add(grp);
                     }
                     else
                     {
-                        if(!inviewgroups)
-                            GroupsNeedFullUpdate.Add(grp);
-                        NewGroupsInView.Add(grp);
+                        Vector3 grppos = grp.getCenterOffset();
+                        float dpos = (grppos - mypos).LengthSquared();
+
+                        float maxview = grp.GetBoundsRadius() + cullingrange;
+                        if (dpos > maxview * maxview)
+                        {
+                            if(inviewgroups)
+                                kills.Add(grp);
+                        }
+                        else
+                        {
+                            if (!inviewgroups)
+                                GroupsNeedFullUpdate.Add(grp);
+                            NewGroupsInView.Add(grp);
+                        }
                     }
                 }
             }

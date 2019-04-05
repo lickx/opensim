@@ -165,6 +165,7 @@ namespace OpenSim.Region.Framework.Scenes
         public static readonly float MOVEMENT = .25f;
         public static readonly float SIGNIFICANT_MOVEMENT = 16.0f;
         public static readonly float CHILDUPDATES_MOVEMENT = 100.0f;
+        public static readonly float CHILDAGENTSCHECK_MOVEMENT = 1024f; // 32m
         public static readonly float CHILDUPDATES_TIME = 2000f; // min time between child updates (ms)
 
         private UUID m_previusParcelUUID = UUID.Zero;
@@ -341,8 +342,10 @@ namespace OpenSim.Region.Framework.Scenes
         private int m_lastChildUpdatesTime;
         private int m_lastChildAgentUpdateGodLevel;
         private float m_lastChildAgentUpdateDrawDistance;
+        private float m_lastRegionsDrawDistance;
         private Vector3 m_lastChildAgentUpdatePosition;
-//        private Vector3 m_lastChildAgentUpdateCamPosition;
+        private Vector3 m_lastChildAgentCheckPosition;
+        //        private Vector3 m_lastChildAgentUpdateCamPosition;
 
         private Vector3 m_lastCameraRayCastCam;
         private Vector3 m_lastCameraRayCastPos;
@@ -627,7 +630,7 @@ namespace OpenSim.Region.Framework.Scenes
         {
             get
             {
-                return Util.Clamp(m_drawDistance, 32f, m_scene.MaxRegionViewDistance);
+                return Util.Clamp(m_drawDistance + 64f, m_scene.MinRegionViewDistance, m_scene.MaxRegionViewDistance);
             }
          }
 
@@ -1079,7 +1082,14 @@ namespace OpenSim.Region.Framework.Scenes
             Animator = new ScenePresenceAnimator(this);
             Overrides = new MovementAnimationOverrides();
             PresenceType = type;
-            DrawDistance = world.DefaultDrawDistance;
+            m_drawDistance = client.StartFar;
+            if(m_drawDistance > 32)
+            {
+                if(m_drawDistance > world.MaxDrawDistance)
+                    m_drawDistance = world.MaxDrawDistance;
+            }
+            else
+                m_drawDistance = world.DefaultDrawDistance;
             RegionHandle = world.RegionInfo.RegionHandle;
             ControllingClient = client;
             Firstname = ControllingClient.FirstName;
@@ -1641,10 +1651,17 @@ namespace OpenSim.Region.Framework.Scenes
             m_previusParcelUUID = UUID.Zero;
             m_currentParcelHide = false;
             m_currentParcelUUID = UUID.Zero;
-            // FIXME: Set RegionHandle to the region handle of the scene this agent is moving into
-
+ 
             CollisionPlane = Vector4.UnitW;
 
+            // we need to kill this on agents that do not see the new region
+            m_scene.ForEachRootScenePresence(delegate(ScenePresence p)
+                {
+                    if (!p.knowsNeighbourRegion(newRegionHandle))
+                    {
+                        SendKillTo(p);
+                    }
+                });
             m_scene.EventManager.TriggerOnMakeChildAgent(this);
         }
 
@@ -2314,7 +2331,9 @@ namespace OpenSim.Region.Framework.Scenes
 
                         m_lastChildUpdatesTime = Util.EnvironmentTickCount() + 10000;
                         m_lastChildAgentUpdatePosition = AbsolutePosition;
+                        m_lastChildAgentCheckPosition = m_lastChildAgentUpdatePosition;
                         m_lastChildAgentUpdateDrawDistance = DrawDistance;
+                        m_lastRegionsDrawDistance = RegionViewDistance;
 
                         m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
                         m_childUpdatesBusy = false; // allow them
@@ -3062,10 +3081,14 @@ namespace OpenSim.Region.Framework.Scenes
             Vector2 regionSize;
             regionSize = new Vector2(m_scene.RegionInfo.RegionSizeX, m_scene.RegionInfo.RegionSizeY);
 
-            if (pos.X < 0 || pos.X >= regionSize.X
-                || pos.Y < 0 || pos.Y >= regionSize.Y
-                || pos.Z < 0)
-                return;
+            if (pos.X < 0.5f)
+                pos.X = 0.5f;
+            else if (pos.X > regionSize.X - 0.5f)
+                pos.X = regionSize.X - 0.5f;
+            if (pos.Y < 0.5f)
+                pos.Y = 0.5f;
+            else if (pos.Y > regionSize.Y - 0.5f)
+                pos.Y = regionSize.Y - 0.5f;
 
             float terrainHeight;
             Scene targetScene = m_scene;
@@ -4042,20 +4065,11 @@ namespace OpenSim.Region.Framework.Scenes
                         //NeedInitialData = 4;
                         //return;
                     }
-
-                    // Create child agents in neighbouring regions
                     IEntityTransferModule m_agentTransfer = m_scene.RequestModuleInterface<IEntityTransferModule>();
                     if (m_agentTransfer != null)
                     {
-                        m_agentTransfer.EnableChildAgents(this);
+                        m_agentTransfer.CloseOldChildAgents(this);
                     }
-
-                    m_lastChildUpdatesTime = Util.EnvironmentTickCount() + 10000;
-                    m_lastChildAgentUpdatePosition = AbsolutePosition;
-                    m_lastChildAgentUpdateDrawDistance = DrawDistance;
-
-                    m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
-                    m_childUpdatesBusy = false; // allow them
                 }
 
                 m_log.DebugFormat("[SCENE PRESENCE({0})]: SendInitialData for {1}", Scene.RegionInfo.RegionName, UUID);
@@ -4118,6 +4132,25 @@ namespace OpenSim.Region.Framework.Scenes
                     m_reprioritizationLastTime = Util.EnvironmentTickCount() + 15000; // delay it
 
                     m_reprioritizationBusy = false;
+                }
+
+                if (!IsChildAgent)
+                {
+                    // Create child agents in neighbouring regions
+                    IEntityTransferModule m_agentTransfer = m_scene.RequestModuleInterface<IEntityTransferModule>();
+                    if (m_agentTransfer != null)
+                    {
+                        m_agentTransfer.EnableChildAgents(this);
+                    }
+
+                    m_lastChildUpdatesTime = Util.EnvironmentTickCount() + 10000;
+                    m_lastChildAgentUpdatePosition = AbsolutePosition;
+                    m_lastChildAgentCheckPosition = m_lastChildAgentUpdatePosition;
+                    m_lastChildAgentUpdateDrawDistance = DrawDistance;
+                    m_lastRegionsDrawDistance = RegionViewDistance;
+
+                    m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
+                    m_childUpdatesBusy = false; // allow them
                 }
             });
 
@@ -4184,8 +4217,17 @@ namespace OpenSim.Region.Framework.Scenes
         {
             m_lastSize = Appearance.AvatarSize;
             int count = 0;
+            SceneObjectPart sitroot = null;
+            if (ParentID != 0 && ParentPart != null) //  we need to send the sitting root prim
+            {
+                sitroot = ParentPart.ParentGroup.RootPart;
+            }
             foreach (ScenePresence p in presences)
             {
+                if (sitroot != null) //  we need to send the sitting root prim
+                {
+                    p.ControllingClient.SendEntityFullUpdateImmediate(ParentPart.ParentGroup.RootPart);
+                }
                 p.ControllingClient.SendEntityFullUpdateImmediate(this);
                 if (p != this && ParcelHideThisAvatar && currentParcelUUID != p.currentParcelUUID && !p.IsViewerUIGod)
                     // either just kill the object
@@ -4199,6 +4241,10 @@ namespace OpenSim.Region.Framework.Scenes
 
         public void SendInitialAvatarDataToAgent(ScenePresence p)
         {
+            if(ParentID != 0 && ParentPart != null) //  we need to send the sitting root prim
+            {
+                p.ControllingClient.SendEntityFullUpdateImmediate(ParentPart.ParentGroup.RootPart);
+            }
             p.ControllingClient.SendEntityFullUpdateImmediate(this);
             if (p != this && ParcelHideThisAvatar && currentParcelUUID != p.currentParcelUUID && !p.IsViewerUIGod)
                     // either just kill the object
@@ -4386,62 +4432,91 @@ namespace OpenSim.Region.Framework.Scenes
                 m_scene.EventManager.TriggerSignificantClientMovement(this);
             }
 
+            if(IsNPC)
+                return;
+
             // updates priority recalc
             checkRePrioritization();
 
-            if(m_childUpdatesBusy)
+            if(m_childUpdatesBusy || RegionViewDistance == 0)
                 return;
 
-            //possible KnownRegionHandles always contains current region and this check is not needed
-            int minhandles = KnownRegionHandles.Contains(RegionHandle) ? 1 : 0;
-            if(KnownRegionHandles.Count > minhandles)
+            int tdiff = Util.EnvironmentTickCountSubtract(m_lastChildUpdatesTime);
+            if (tdiff < CHILDUPDATES_TIME)
+                return;
+
+            bool viewchanged = Math.Abs(RegionViewDistance - m_lastRegionsDrawDistance) > 32.0f;
+
+            IEntityTransferModule m_agentTransfer = m_scene.RequestModuleInterface<IEntityTransferModule>();
+            float dx = pos.X - m_lastChildAgentCheckPosition.X;
+            float dy = pos.Y - m_lastChildAgentCheckPosition.Y;
+            if ((m_agentTransfer != null) && (viewchanged || ((dx * dx + dy * dy) > CHILDAGENTSCHECK_MOVEMENT)))
             {
-                int tdiff = Util.EnvironmentTickCountSubtract(m_lastChildUpdatesTime);
-                if(tdiff < CHILDUPDATES_TIME)
-                    return;
+                m_childUpdatesBusy = true;
+                m_lastChildAgentCheckPosition = pos;
+                m_lastChildAgentUpdatePosition = pos;
+                m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
+                m_lastChildAgentUpdateDrawDistance = DrawDistance;
+                m_lastRegionsDrawDistance = RegionViewDistance;
+                // m_lastChildAgentUpdateCamPosition = CameraPosition;
 
-                bool doUpdate = false;
-                if(m_lastChildAgentUpdateGodLevel != GodController.ViwerUIGodLevel)
-                    doUpdate = true;
-               
-                if(!doUpdate && Math.Abs(DrawDistance - m_lastChildAgentUpdateDrawDistance) > 32.0f)
-                    doUpdate = true;
-
-                if(!doUpdate)
+                Util.FireAndForget(
+                    o =>
+                    {
+                        m_agentTransfer.EnableChildAgents(this);
+                        m_lastChildUpdatesTime = Util.EnvironmentTickCount();
+                        m_childUpdatesBusy = false;
+                    }, null, "ScenePresence.CheckChildAgents");
+            }
+            else
+            {
+                //possible KnownRegionHandles always contains current region and this check is not needed
+                int minhandles = KnownRegionHandles.Contains(RegionHandle) ? 1 : 0;
+                if(KnownRegionHandles.Count > minhandles)
                 {
-                    diff = pos - m_lastChildAgentUpdatePosition;
-                    if (diff.LengthSquared() > CHILDUPDATES_MOVEMENT)
+                    bool doUpdate = false;
+                    if (m_lastChildAgentUpdateGodLevel != GodController.ViwerUIGodLevel)
                         doUpdate = true;
-                }
 
-                if(doUpdate)
-                {
-                    m_childUpdatesBusy = true;
-                    m_lastChildAgentUpdatePosition = pos;
-                    m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
-                    m_lastChildAgentUpdateDrawDistance = DrawDistance;
-//                        m_lastChildAgentUpdateCamPosition = CameraPosition;
+                    if (Math.Abs(DrawDistance - m_lastChildAgentUpdateDrawDistance) > 32.0f)
+                        doUpdate = true;
 
-                    AgentPosition agentpos = new AgentPosition();
-                    agentpos.AgentID = new UUID(UUID.Guid);
-                    agentpos.SessionID = ControllingClient.SessionId;
-                    agentpos.Size = Appearance.AvatarSize;
-                    agentpos.Center = CameraPosition;
-                    agentpos.Far = DrawDistance;
-                    agentpos.Position = AbsolutePosition;
-                    agentpos.Velocity = Velocity;
-                    agentpos.RegionHandle = RegionHandle;
-                    agentpos.GodData = GodController.State();
-                    agentpos.Throttles = ControllingClient.GetThrottlesPacked(1);
+                    if(!doUpdate)
+                    {
+                        diff = pos - m_lastChildAgentUpdatePosition;
+                        if (diff.LengthSquared() > CHILDUPDATES_MOVEMENT)
+                            doUpdate = true;
+                    }
 
-                    // Let's get this out of the update loop
-                    Util.FireAndForget(
-                        o =>
-                        {
-                            m_scene.SendOutChildAgentUpdates(agentpos, this);
-                            m_lastChildUpdatesTime = Util.EnvironmentTickCount();
-                            m_childUpdatesBusy = false;
-                        }, null, "ScenePresence.SendOutChildAgentUpdates");
+                    if (doUpdate)
+                    {
+                        m_childUpdatesBusy = true;
+                        m_lastChildAgentUpdatePosition = pos;
+                        m_lastChildAgentUpdateGodLevel = GodController.ViwerUIGodLevel;
+                        m_lastChildAgentUpdateDrawDistance = DrawDistance;
+                        // m_lastChildAgentUpdateCamPosition = CameraPosition;
+
+                        AgentPosition agentpos = new AgentPosition();
+                        agentpos.AgentID = new UUID(UUID.Guid);
+                        agentpos.SessionID = ControllingClient.SessionId;
+                        agentpos.Size = Appearance.AvatarSize;
+                        agentpos.Center = CameraPosition;
+                        agentpos.Far = DrawDistance;
+                        agentpos.Position = AbsolutePosition;
+                        agentpos.Velocity = Velocity;
+                        agentpos.RegionHandle = RegionHandle;
+                        agentpos.GodData = GodController.State();
+                        agentpos.Throttles = ControllingClient.GetThrottlesPacked(1);
+
+                        // Let's get this out of the update loop
+                        Util.FireAndForget(
+                            o =>
+                            {
+                                m_scene.SendOutChildAgentUpdates(agentpos, this);
+                                m_lastChildUpdatesTime = Util.EnvironmentTickCount();
+                                m_childUpdatesBusy = false;
+                            }, null, "ScenePresence.SendOutChildAgentUpdates");
+                    }
                 }
             }
         }
@@ -6676,7 +6751,7 @@ namespace OpenSim.Region.Framework.Scenes
                             if (p.IsDeleted || p == this || p.ControllingClient == null || !p.ControllingClient.IsActive)
                                 continue;
 
-                            // only those on previus parcel need receive kills
+                            // only those on previous parcel need receive kills
                             if (previusParcelID == p.currentParcelUUID)
                             {
                                 if(!p.IsViewerUIGod)
