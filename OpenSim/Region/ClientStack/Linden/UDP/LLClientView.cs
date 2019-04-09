@@ -5059,7 +5059,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                             if (istree)
                                 maxUpdatesBytes -= 64;
                             else
-                                maxUpdatesBytes -= 100; // crude estimation
+                                maxUpdatesBytes -= 120; // crude estimation
 
                             if (compressedUpdates == null)
                             {
@@ -5127,7 +5127,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         CreateAvatarUpdateBlock((ScenePresence)eu.Entity, zc);
                     else
                         CreatePrimUpdateBlock((SceneObjectPart)eu.Entity, mysp, zc);
-                    if (zc.Position < LLUDPServer.MAXPAYLOAD)
+                    if (zc.Position < LLUDPServer.MAXPAYLOAD - 200)
                     {
                         tau.Add(eu);
                         ++count;
@@ -5149,7 +5149,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         buf.DataLength = lastpos;
 
                         m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
-                            delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                            //delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                            null, false, false);
 
                         buf = newbuf;
                         zc.Data = buf.Data;
@@ -5173,7 +5174,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     buf.Data[countposition] = (byte)count;
                     buf.DataLength = zc.Finish();
                     m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
-                        delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                        //delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                        null, false, false);
                 }
             }
 
@@ -5275,9 +5277,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     lastzc = zc.ZeroCount;
 
                     CreateCompressedUpdateBlockZC(sop, mysp, zc);
-                    if (zc.Position < LLUDPServer.MAXPAYLOAD)
+                    if (zc.Position < LLUDPServer.MAXPAYLOAD - 200)
                     {
-                        tau.Add(eu);
+                        //tau.Add(eu);
                         ++count;
                     }
                     else
@@ -5296,7 +5298,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         buf.DataLength = lastpos;
 
                         m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
-                            delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                            //delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                            null, false, false);
 
                         buf = newbuf;
                         zc.Data = buf.Data;
@@ -5309,7 +5312,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         // im lazy now, just do last again
                         CreateCompressedUpdateBlockZC(sop, mysp, zc);
                         tau = new List<EntityUpdate>(30);
-                        tau.Add(eu);
+                        //tau.Add(eu);
                         count = 1;
                     }
                 }
@@ -5319,7 +5322,8 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                     buf.Data[countposition] = (byte)count;
                     buf.DataLength = zc.Finish();
                     m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task,
-                        delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                        //delegate (OutgoingPacket oPacket) { ResendPrimUpdates(tau, oPacket); }, false, false);
+                        null, false, false);
                 }
             }
 
