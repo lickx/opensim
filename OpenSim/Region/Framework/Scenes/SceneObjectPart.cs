@@ -2612,6 +2612,13 @@ namespace OpenSim.Region.Framework.Scenes
             if (_parentID == 0)
                 return RotationOffset;
 
+            if (ParentGroup.IsAttachment)
+            {
+                ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
+                if (sp != null)
+                    return sp.GetWorldRotation() * RotationOffset;
+            }
+
             // A child SOP's rotation is relative to the root SOP's rotation.
             // Combine them to get my absolute rotation.
             return ParentGroup.RootPart.RotationOffset * RotationOffset;
