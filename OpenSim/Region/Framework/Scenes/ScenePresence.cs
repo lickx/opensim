@@ -601,9 +601,9 @@ namespace OpenSim.Region.Framework.Scenes
         public string Firstname { get; private set; }
         public string Lastname { get; private set; }
 
-        public bool haveGroupInformation;
-        public bool gotCrossUpdate;
-        public byte crossingFlags;
+        public bool m_haveGroupInformation;
+        public bool m_gotCrossUpdate;
+        public byte m_crossingFlags;
 
         public string Grouptitle
         {
@@ -1322,7 +1322,7 @@ namespace OpenSim.Region.Framework.Scenes
                     {
                         part.AddSittingAvatar(this);
                         // if not actually on the target invalidate it
-                        if(gotCrossUpdate && (crossingFlags & 0x04) == 0)
+                        if(m_gotCrossUpdate && (m_crossingFlags & 0x04) == 0)
                                 part.SitTargetAvatar = UUID.Zero;
 
                         ParentID = part.LocalId;
@@ -1604,9 +1604,9 @@ namespace OpenSim.Region.Framework.Scenes
         public void MakeChildAgent(ulong newRegionHandle)
         {
             m_updateAgentReceivedAfterTransferEvent.Reset();
-            haveGroupInformation = false;
-            gotCrossUpdate = false;
-            crossingFlags = 0;
+            m_haveGroupInformation = false;
+            m_gotCrossUpdate = false;
+            m_crossingFlags = 0;
             m_scene.EventManager.OnRegionHeartbeatEnd -= RegionHeartbeatEnd;
 
             RegionHandle = newRegionHandle;
@@ -1688,10 +1688,6 @@ namespace OpenSim.Region.Framework.Scenes
 //            }
         }
 
-        /// <summary>
-        /// Do not call this directly.  Call Scene.RequestTeleportLocation() instead.
-        /// </summary>
-        /// <param name="pos"></param>
         public void Teleport(Vector3 pos)
         {
             TeleportWithMomentum(pos, Vector3.Zero);
@@ -1736,37 +1732,95 @@ namespace OpenSim.Region.Framework.Scenes
             SendTerseUpdateToAllClients();
         }
 
-        public void avnLocalTeleport(Vector3 newpos, Vector3? newvel, bool rotateToVelXY)
+        public void LocalTeleport(Vector3 newpos, Vector3 newvel, Vector3 newlookat, int flags)
         {
-            if(!CheckLocalTPLandingPoint(ref newpos))
-                return;
-
-            AbsolutePosition = newpos;
-
-            if (newvel.HasValue)
+            if (newpos.X <= 0)
             {
-                if ((Vector3)newvel == Vector3.Zero)
-                {
-                    if (PhysicsActor != null)
-                        PhysicsActor.SetMomentum(Vector3.Zero);
-                    m_velocity = Vector3.Zero;
-                }
-                else
-                {
-                    if (PhysicsActor != null)
-                        PhysicsActor.SetMomentum((Vector3)newvel);
-                    m_velocity = (Vector3)newvel;
-
-                    if (rotateToVelXY)
-                    {
-                        Vector3 lookAt = (Vector3)newvel;
-                        lookAt.Z = 0;
-                        lookAt.Normalize();
-                        ControllingClient.SendLocalTeleport(newpos, lookAt, (uint)TeleportFlags.ViaLocation);
-                        return;
-                    }
-                }
+                newpos.X = 0.1f;
+                if (newvel.X < 0)
+                    newvel.X = 0;
             }
+            else if (newpos.X >= Scene.RegionInfo.RegionSizeX)
+            {
+                newpos.X = Scene.RegionInfo.RegionSizeX - 0.1f;
+                if (newvel.X > 0)
+                    newvel.X = 0;
+            }
+
+            if (newpos.Y <= 0)
+            {
+                newpos.Y = 0.1f;
+                if (newvel.Y < 0)
+                    newvel.Y = 0;
+            }
+            else if (newpos.Y >= Scene.RegionInfo.RegionSizeY)
+            {
+                newpos.Y = Scene.RegionInfo.RegionSizeY - 0.1f;
+                if (newvel.Y > 0)
+                    newvel.Y = 0;
+            }
+
+            string reason;
+            if (!m_scene.TestLandRestrictions(UUID, out reason, ref newpos.X, ref newpos.Y))
+                return ;
+
+            if (IsSatOnObject)
+                StandUp();
+
+            float localHalfAVHeight = 0.8f;
+            if (Appearance != null)
+                localHalfAVHeight = Appearance.AvatarHeight * 0.5f;
+
+            float posZLimit = (float)Scene.Heightmap[(int)newpos.X, (int)newpos.Y];
+            posZLimit += localHalfAVHeight + 0.1f;
+            if (newpos.Z < posZLimit)
+                newpos.Z = posZLimit;
+
+            if((flags & 0x1e) != 0)
+            {
+                if ((flags & 8) != 0)
+                    Flying = true;
+                else if ((flags & 16) != 0)
+                    Flying = false;
+
+                uint tpflags = (uint)TeleportFlags.ViaLocation;
+                if(Flying)
+                    tpflags |= (uint)TeleportFlags.IsFlying;
+
+                Vector3 lookat = Lookat;
+
+                if ((flags & 2) != 0)
+                {
+                    newlookat.Z = 0;
+                    newlookat.Normalize();
+                    if (Math.Abs(newlookat.X) > 0.001 || Math.Abs(newlookat.Y) > 0.001)
+                        lookat = newlookat;
+                }
+                else if((flags & 4) != 0)
+                {
+                    if((flags & 1) != 0)
+                        newlookat = newvel;
+                    else
+                        newlookat = m_velocity;
+                    newlookat.Z = 0;
+                    newlookat.Normalize();
+                    if (Math.Abs(newlookat.X) > 0.001 || Math.Abs(newlookat.Y) > 0.001)
+                        lookat = newlookat;
+                }
+
+                AbsolutePosition = newpos;
+                ControllingClient.SendLocalTeleport(newpos, lookat, tpflags);
+            }
+            else
+                AbsolutePosition = newpos;
+
+            if ((flags & 1) != 0)
+            {
+                if (PhysicsActor != null)
+                    PhysicsActor.SetMomentum(newvel);
+                m_velocity = newvel;
+            }
+
             SendTerseUpdateToAllClients();
         }
 
@@ -2152,7 +2206,7 @@ namespace OpenSim.Region.Framework.Scenes
 
                 if (!IsNPC)
                 {
-                    if (!haveGroupInformation)
+                    if (!m_haveGroupInformation)
                     {
                         IGroupsModule gm = m_scene.RequestModuleInterface<IGroupsModule>();
                         if (gm != null)
@@ -2171,9 +2225,9 @@ namespace OpenSim.Region.Framework.Scenes
                 }
 
                 if (m_teleportFlags > 0)
-                    gotCrossUpdate = false; // sanity check
+                    m_gotCrossUpdate = false; // sanity check
 
-                if (!gotCrossUpdate)
+                if (!m_gotCrossUpdate)
                     RotateToLookAt(look);
 
                 m_previusParcelHide = false;
@@ -2185,7 +2239,7 @@ namespace OpenSim.Region.Framework.Scenes
                 m_inTransit = false;
 
                 // Tell the client that we're ready to send rest
-                if (!gotCrossUpdate)
+                if (!m_gotCrossUpdate)
                 {
                     m_gotRegionHandShake = false; // allow it if not a crossing
                     ControllingClient.SendRegionHandshake();
@@ -2197,7 +2251,7 @@ namespace OpenSim.Region.Framework.Scenes
 
                 if(!IsNPC)
                 {
-                    if( ParentPart != null && (crossingFlags & 0x08) != 0)
+                    if( ParentPart != null && (m_crossingFlags & 0x08) != 0)
                     {
                         ParentPart.ParentGroup.SendFullAnimUpdateToClient(ControllingClient);
                     }
@@ -2221,13 +2275,13 @@ namespace OpenSim.Region.Framework.Scenes
                     GodController.SyncViewerState();
 
                     // start sending terrain patchs
-                    if (!gotCrossUpdate)
+                    if (!m_gotCrossUpdate)
                         Scene.SendLayerData(ControllingClient);
 
                     // send initial land overlay and parcel
                     ILandChannel landch = m_scene.LandChannel;
                     if (landch != null)
-                        landch.sendClientInitialLandInfo(client, !gotCrossUpdate);
+                        landch.sendClientInitialLandInfo(client, !m_gotCrossUpdate);
                 }
 
                 List<ScenePresence> allpresences = m_scene.GetScenePresences();
@@ -2318,7 +2372,7 @@ namespace OpenSim.Region.Framework.Scenes
 
                 if (!IsNPC)
                 {
-                    if(gotCrossUpdate)
+                    if(m_gotCrossUpdate)
                     {
                         SendOtherAgentsAvatarFullToMe();
 
@@ -2356,7 +2410,7 @@ namespace OpenSim.Region.Framework.Scenes
                         IFriendsModule friendsModule = m_scene.RequestModuleInterface<IFriendsModule>();
                         if (friendsModule != null)
                         {
-                            if(gotCrossUpdate)
+                            if(m_gotCrossUpdate)
                                 friendsModule.IsNowRoot(this);
                             else
                                 friendsModule.SendFriendsOnlineIfNeeded(ControllingClient);
@@ -2367,9 +2421,9 @@ namespace OpenSim.Region.Framework.Scenes
             }
             finally
             {
-                haveGroupInformation = false;
-                gotCrossUpdate = false;
-                crossingFlags = 0;
+                m_haveGroupInformation = false;
+                m_gotCrossUpdate = false;
+                m_crossingFlags = 0;
                 m_inTransit = false;
             }
  
@@ -4910,7 +4964,7 @@ namespace OpenSim.Region.Framework.Scenes
 
             if(isCrossUpdate)
             {
-                cAgent.CrossingFlags = crossingFlags;
+                cAgent.CrossingFlags = m_crossingFlags;
                 cAgent.CrossingFlags |= 1;
                 cAgent.CrossExtraFlags = 0;
                 if((LastCommands & ScriptControlled.CONTROL_LBUTTON) != 0)
@@ -5047,9 +5101,9 @@ namespace OpenSim.Region.Framework.Scenes
             if (cAgent.MotionState != 0)
                 Animator.currentControlState = (ScenePresenceAnimator.motionControlStates) cAgent.MotionState;
 
-            crossingFlags = cAgent.CrossingFlags;
-            gotCrossUpdate = (crossingFlags != 0);
-            if(gotCrossUpdate)
+            m_crossingFlags = cAgent.CrossingFlags;
+            m_gotCrossUpdate = (m_crossingFlags != 0);
+            if(m_gotCrossUpdate)
             {
                 LastCommands &= ~(ScriptControlled.CONTROL_LBUTTON | ScriptControlled.CONTROL_ML_LBUTTON);
                 if((cAgent.CrossExtraFlags & 1) != 0)
@@ -5059,11 +5113,11 @@ namespace OpenSim.Region.Framework.Scenes
                 MouseDown = (cAgent.CrossExtraFlags & 3) != 0;
             }
 
-            haveGroupInformation = false;
+            m_haveGroupInformation = false;
             // using this as protocol detection don't want to mess with the numbers for now
             if(cAgent.ActiveGroupTitle != null)
             {
-                haveGroupInformation = true;
+                m_haveGroupInformation = true;
                 COF = cAgent.agentCOF;
                 if(ControllingClient.IsGroupMember(cAgent.ActiveGroupID))
                 {
