@@ -846,7 +846,6 @@ namespace OpenSim.Region.Framework.Scenes
                         }
                     }
                 }
-                TriggerScriptChangedEvent(Changed.POSITION);
             }
         }
 
