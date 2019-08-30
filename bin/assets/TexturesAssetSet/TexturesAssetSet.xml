@@ -832,6 +832,7 @@
     <Key Name="name" Value="Water"/>
     <Key Name="assetType" Value="0" />
     <Key Name="fileName" Value="43c32285-d658-1793-c123-bf86315de055.jp2" />
+  </Section>
 
   <Section Name="FALLB_BAKED_HEAD">
      <Key Name="assetID" Value="5a9f4a74-30f2-821c-b88d-70499d3e7183"/>
