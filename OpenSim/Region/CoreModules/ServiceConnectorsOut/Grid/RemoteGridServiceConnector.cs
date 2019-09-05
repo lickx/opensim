@@ -52,7 +52,9 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
                 MethodBase.GetCurrentMethod().DeclaringType);
 
         private bool m_Enabled = false;
-        private string m_ThisGatekeeper = string.Empty;
+        private string m_ThisGatekeeperURI = string.Empty;
+        private string m_ThisGatekeeperHost = string.Empty;
+        private string m_ThisGatekeeperIP = string.Empty;
 
         private IGridService m_LocalGridService;
         private IGridService m_RemoteGridService;
@@ -126,13 +128,12 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
             if(m_RegionInfoCache == null)
                 m_RegionInfoCache = new RegionInfoCache();
 
-            m_ThisGatekeeper = Util.GetConfigVarFromSections<string>(source, "GatekeeperURI",
+            m_ThisGatekeeperURI = Util.GetConfigVarFromSections<string>(source, "GatekeeperURI",
                 new string[] { "Startup", "Hypergrid", "GridService" }, String.Empty);
             // Legacy. Remove soon!
-            m_ThisGatekeeper = gridConfig.GetString("Gatekeeper", m_ThisGatekeeper);
+            m_ThisGatekeeperURI = gridConfig.GetString("Gatekeeper", m_ThisGatekeeperURI);
 
-            Util.checkServiceURI(m_ThisGatekeeper, out m_ThisGatekeeper);
-
+            Util.checkServiceURI(m_ThisGatekeeperURI, out m_ThisGatekeeperURI, out m_ThisGatekeeperHost, out m_ThisGatekeeperIP);
             return true;
         }
 
@@ -247,17 +248,27 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
             string regionName = name;
             if(name.Contains("."))
             {
-                if(string.IsNullOrWhiteSpace(m_ThisGatekeeper))
+                if(string.IsNullOrWhiteSpace(m_ThisGatekeeperIP))
                     return rinfo; // no HG
 
                 string regionURI = "";
-                if(!Util.buildHGRegionURI(name, out regionURI, out regionName) || string.IsNullOrWhiteSpace(regionName))
+                string regionHost = "";
+                if (!Util.buildHGRegionURI(name, out regionURI, out regionHost, out regionName))
                     return rinfo; // invalid
-                if(m_ThisGatekeeper != regionURI)
+                if (!m_ThisGatekeeperHost.Equals(regionHost, StringComparison.InvariantCultureIgnoreCase) && !m_ThisGatekeeperIP.Equals(regionHost))
                     return rinfo; // not local grid
             }
 
-            rinfo = m_RemoteGridService.GetRegionByName(scopeID, regionName);
+            if (String.IsNullOrEmpty(regionName))
+            {
+                rinfo = m_RemoteGridService.GetDefaultRegions(UUID.Zero)[0];
+                if (rinfo == null)
+                    m_log.Warn("[REMOTE GRID CONNECTOR] returned null default region");
+                else
+                    m_log.WarnFormat("[REMOTE GRID CONNECTOR] returned default region {0}", rinfo.RegionName);
+            }
+            else
+                rinfo = m_RemoteGridService.GetRegionByName(scopeID, regionName);
             m_RegionInfoCache.Cache(scopeID, rinfo);
             return rinfo;
         }
@@ -273,17 +284,32 @@ namespace OpenSim.Region.CoreModules.ServiceConnectorsOut.Grid
             string regionName = name;
             if(name.Contains("."))
             {
-                if(string.IsNullOrWhiteSpace(m_ThisGatekeeper))
+                if(string.IsNullOrWhiteSpace(m_ThisGatekeeperURI))
                     return rinfo; // no HG
 
                 string regionURI = "";
-                if(!Util.buildHGRegionURI(name, out regionURI, out regionName) || string.IsNullOrWhiteSpace(regionName))
+                string regionHost = "";
+                if (!Util.buildHGRegionURI(name, out regionURI, out regionHost, out regionName))
                     return rinfo; // invalid
-                if(m_ThisGatekeeper != regionURI)
+                if (!m_ThisGatekeeperHost.Equals(regionHost, StringComparison.InvariantCultureIgnoreCase) && !m_ThisGatekeeperIP.Equals(regionHost))
                     return rinfo; // not local grid
             }
 
-            List<GridRegion> grinfo = m_RemoteGridService.GetRegionsByName(scopeID, regionName, maxNumber);
+            List<GridRegion> grinfo = null;
+            if (String.IsNullOrEmpty(regionName))
+            {
+                List<GridRegion> grinfos = m_RemoteGridService.GetDefaultRegions(scopeID);
+                if (grinfos == null || grinfos.Count == 0)
+                    m_log.Warn("[REMOTE GRID CONNECTOR] returned no default regions");
+                else
+                {
+                    m_log.WarnFormat("[REMOTE GRID CONNECTOR] returned default regions {0}, ...", grinfos[0].RegionName);
+                    // only return first
+                    grinfo = new List<GridRegion>(){grinfos[0]};
+                }
+            }
+            else
+                grinfo = m_RemoteGridService.GetRegionsByName(scopeID, regionName, maxNumber);
 
             if (grinfo != null)
             {
