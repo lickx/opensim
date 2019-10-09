@@ -1960,7 +1960,15 @@ namespace OpenSim.Region.Framework.Scenes
                 return;
 
             if (localGlobalTF)
-                impulse *= GetWorldRotation();
+            {
+                if (ParentGroup.IsAttachment)
+                {
+                    ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
+                    if (sp != null)
+                        impulse *= sp.GetWorldRotation();
+                } else
+                    impulse *= GetWorldRotation();
+            }
 
             ParentGroup.applyImpulse(impulse);
         }
@@ -1971,9 +1979,6 @@ namespace OpenSim.Region.Framework.Scenes
             if (ParentGroup == null || ParentGroup.IsDeleted || ParentGroup.inTransit)
                 return;
 
-            if (ParentGroup.IsAttachment)
-                return;                         // don't work on attachments (for now ??)
-
             SceneObjectPart root = ParentGroup.RootPart;
 
             if (root.VehicleType != (int)Vehicle.TYPE_NONE) // don't mess with vehicles
@@ -1985,7 +1990,16 @@ namespace OpenSim.Region.Framework.Scenes
                 return;
 
             if (localGlobalTF)
-                pVel *= GetWorldRotation();
+            {
+                if (ParentGroup.IsAttachment)
+                {
+                    ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
+                    if (sp != null)
+                        pVel *= sp.GetWorldRotation();
+                }
+                else
+                    pVel *= GetWorldRotation();
+            }
 
             ParentGroup.Velocity = pVel;
         }
@@ -1996,9 +2010,6 @@ namespace OpenSim.Region.Framework.Scenes
             if (ParentGroup == null || ParentGroup.IsDeleted || ParentGroup.inTransit)
                 return;
 
-            if (ParentGroup.IsAttachment)
-                return;                         // don't work on attachments (for now ??)
-
             SceneObjectPart root = ParentGroup.RootPart;
 
             if (root.VehicleType != (int)Vehicle.TYPE_NONE) // don't mess with vehicles
@@ -2010,7 +2021,16 @@ namespace OpenSim.Region.Framework.Scenes
                 return;
 
             if (localGlobalTF)
-                pAngVel *= GetWorldRotation();
+            {
+                if (ParentGroup.IsAttachment)
+                {
+                    ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
+                    if (sp != null)
+                        pAngVel *= sp.GetWorldRotation();
+                }
+                else
+                    pAngVel *= GetWorldRotation();
+            }
 
             root.AngularVelocity = pAngVel;
         }
@@ -2029,7 +2049,16 @@ namespace OpenSim.Region.Framework.Scenes
                 return;
 
             if (localGlobalTF)
-                ParentGroup.ApplyAngularImpulse(impulse * GetWorldRotation());
+            {
+                if (ParentGroup.IsAttachment)
+                {
+                    ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
+                    if (sp != null)
+                        ParentGroup.ApplyAngularImpulse(impulse * sp.GetWorldRotation());
+                }
+                else
+                    ParentGroup.ApplyAngularImpulse(impulse * GetWorldRotation());
+            }
             else
                 ParentGroup.ApplyAngularImpulse(impulse);
         }
@@ -2048,7 +2077,16 @@ namespace OpenSim.Region.Framework.Scenes
             Vector3 torque = torquei;
 
             if (localGlobalTF)
-                torque *= GetWorldRotation();
+            {
+                if (ParentGroup.IsAttachment)
+                {
+                    ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
+                    if (sp != null)
+                        torque *= sp.GetWorldRotation();
+                }
+                else
+                    torque *= GetWorldRotation();
+            }
 
             Torque = torque;
         }
@@ -2610,13 +2648,6 @@ namespace OpenSim.Region.Framework.Scenes
         {
             if (_parentID == 0)
                 return RotationOffset;
-
-            if (ParentGroup.IsAttachment)
-            {
-                ScenePresence sp = ParentGroup.Scene.GetScenePresence(ParentGroup.AttachedAvatar);
-                if (sp != null)
-                    return sp.GetWorldRotation() * RotationOffset;
-            }
 
             // A child SOP's rotation is relative to the root SOP's rotation.
             // Combine them to get my absolute rotation.
