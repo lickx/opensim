@@ -250,11 +250,7 @@ namespace OpenSim.Region.ClientStack.Linden
                             if (m_presence == null)
                                 m_presence = m_scene.GetScenePresence(pId);
 
-                            if (m_presence == null || m_presence.IsDeleted)
-                                return true;
-                            //if(response.throttle)
-                            //    return m_presence.CapCanSendAsset(1, response.bytes);
-                            return m_presence.CapCanSendAsset(2, response.bytes);
+                            return true;
                         }
                         return false;
                     }
