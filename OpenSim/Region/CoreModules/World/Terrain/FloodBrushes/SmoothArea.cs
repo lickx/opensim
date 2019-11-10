@@ -33,11 +33,15 @@ namespace OpenSim.Region.CoreModules.World.Terrain.FloodBrushes
     {
         #region ITerrainFloodEffect Members
 
-        public void FloodEffect(ITerrainChannel map, bool[,] fillArea, double strength,
+        public void FloodEffect(ITerrainChannel map, bool[,] fillArea, float height, float strength,
             int startX, int endX, int startY, int endY)
         {
-            double area = strength;
-            double step = strength / 4.0;
+            double area = 4;
+            double step = 1;
+
+            strength *= 0.002f;
+            if(strength > 1.0f)
+                strength = 1.0f;
 
             double[,] manipulate = new double[map.Width,map.Height];
             int x, y;
@@ -52,10 +56,10 @@ namespace OpenSim.Region.CoreModules.World.Terrain.FloodBrushes
                     int avgsteps = 0;
 
                     double n;
-                    for (n = 0.0 - area; n < area; n += step)
+                    for (n = -area; n < area; n += step)
                     {
                         double l;
-                        for (l = 0.0 - area; l < area; l += step)
+                        for (l = -area; l < area; l += step)
                         {
                             avgsteps++;
                             average += GetBilinearInterpolate(x + n, y + l, map);
@@ -72,7 +76,7 @@ namespace OpenSim.Region.CoreModules.World.Terrain.FloodBrushes
                     if (!fillArea[x, y])
                         continue;
 
-                    map[x, y] = manipulate[x, y];
+                    map[x, y] = (1.0 - strength) * map[x, y] + strength * manipulate[x, y];
                 }
             }
         }
