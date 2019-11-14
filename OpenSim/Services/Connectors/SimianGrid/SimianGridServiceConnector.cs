@@ -245,6 +245,12 @@ namespace OpenSim.Services.Connectors.SimianGrid
             }
         }
 
+        public GridRegion GetRegionByNameSpecific(UUID scopeID, string regionName)
+        {
+
+            return null;
+        }
+
         public GridRegion GetRegionByName(UUID scopeID, string regionName)
         {
             List<GridRegion> regions = GetRegionsByName(scopeID, regionName, 1);

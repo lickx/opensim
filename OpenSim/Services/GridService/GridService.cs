@@ -476,9 +476,9 @@ namespace OpenSim.Services.GridService
 
         public GridRegion GetRegionByName(UUID scopeID, string name)
         {
-            List<RegionData> rdatas = m_Database.Get(Util.EscapeForLike(name), scopeID);
-            if ((rdatas != null) && (rdatas.Count > 0))
-                return RegionData2RegionInfo(rdatas[0]); // get the first
+            RegionData rdata = m_Database.GetSpecific(name, scopeID);
+            if (rdata != null)
+                return RegionData2RegionInfo(rdata);
 
             if (m_AllowHypergridMapSearch)
             {
@@ -499,7 +499,7 @@ namespace OpenSim.Services.GridService
             int count = 0;
             List<GridRegion> rinfos = new List<GridRegion>();
 
-            if (count < maxNumber && m_AllowHypergridMapSearch && name.Contains("."))
+            if (m_AllowHypergridMapSearch && name.Contains("."))
             {
                 string regionURI = "";
                 string regionHost = "";
@@ -527,7 +527,7 @@ namespace OpenSim.Services.GridService
                     {
                         if (count++ < maxNumber)
                             rinfos.Add(RegionData2RegionInfo(rdata));
-                        if(rdata.RegionName == mapname)
+                        if(mapname.Equals(rdata.RegionName,StringComparison.InvariantCultureIgnoreCase))
                         {
                             haveMatch = true;
                             if(count == maxNumber)
@@ -549,7 +549,7 @@ namespace OpenSim.Services.GridService
                     {
                         if (count++ < maxNumber)
                             rinfos.Add(RegionData2RegionInfo(rdata));
-                        if(rdata.RegionName == mapname)
+                        if (mapname.Equals(rdata.RegionName, StringComparison.InvariantCultureIgnoreCase))
                         {
                             haveMatch = true;
                             if(count == maxNumber)
@@ -577,11 +577,20 @@ namespace OpenSim.Services.GridService
             }
             else if (rdatas != null && (rdatas.Count > 0))
             {
-//                m_log.DebugFormat("[GRID SERVICE]: Found {0} regions", rdatas.Count);
+                //m_log.DebugFormat("[GRID SERVICE]: Found {0} regions", rdatas.Count);
                 foreach (RegionData rdata in rdatas)
                 {
                     if (count++ < maxNumber)
                         rinfos.Add(RegionData2RegionInfo(rdata));
+                    if (name.Equals(rdata.RegionName, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        if (count == maxNumber)
+                        {
+                            rinfos.RemoveAt(count - 1);
+                            rinfos.Add(RegionData2RegionInfo(rdata));
+                            break;
+                        }
+                    }
                 }
             }
 
