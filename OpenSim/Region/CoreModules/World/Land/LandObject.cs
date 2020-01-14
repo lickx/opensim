@@ -541,26 +541,42 @@ namespace OpenSim.Region.CoreModules.World.Land
                         ParcelFlags.UseEstateVoiceChan);
             }
 
-            // don't allow passes on group owned until we can give money to groups
-            if (!newData.IsGroupOwned && m_scene.Permissions.CanEditParcelProperties(remote_client.AgentId,this, GroupPowers.LandManagePasses, false))
+            if(m_scene.RegionInfo.EstateSettings.TaxFree)
             {
-                newData.PassHours = args.PassHours;
-                newData.PassPrice = args.PassPrice;
+                // don't allow passes on group owned until we can give money to groups
+                if (!newData.IsGroupOwned && m_scene.Permissions.CanEditParcelProperties(remote_client.AgentId,this, GroupPowers.LandManagePasses, false))
+                {
+                    newData.PassHours = args.PassHours;
+                    newData.PassPrice = args.PassPrice;
 
-                allowedDelta |= (uint)ParcelFlags.UsePassList;
+                    allowedDelta |= (uint)ParcelFlags.UsePassList;
+                }
+
+                if (m_scene.Permissions.CanEditParcelProperties(remote_client.AgentId, this, GroupPowers.LandManageAllowed, false))
+                {
+                    allowedDelta |= (uint)(ParcelFlags.UseAccessGroup |
+                            ParcelFlags.UseAccessList);
+                }
+
+                if (m_scene.Permissions.CanEditParcelProperties(remote_client.AgentId, this, GroupPowers.LandManageBanned, false))
+                {
+                    allowedDelta |= (uint)(ParcelFlags.UseBanList |
+                            ParcelFlags.DenyAnonymous |
+                            ParcelFlags.DenyAgeUnverified);
+                }
             }
 
-            if (m_scene.Permissions.CanEditParcelProperties(remote_client.AgentId, this, GroupPowers.LandManageAllowed, false))
+            // enforce estate age and payinfo limitations
+            if (m_scene.RegionInfo.EstateSettings.DenyMinors)
             {
-                allowedDelta |= (uint)(ParcelFlags.UseAccessGroup |
-                        ParcelFlags.UseAccessList);
+                args.ParcelFlags |= (uint)ParcelFlags.DenyAgeUnverified;
+                allowedDelta |= (uint)ParcelFlags.DenyAgeUnverified;
             }
 
-            if (m_scene.Permissions.CanEditParcelProperties(remote_client.AgentId, this, GroupPowers.LandManageBanned, false))
+            if (m_scene.RegionInfo.EstateSettings.DenyAnonymous)
             {
-                allowedDelta |= (uint)(ParcelFlags.UseBanList |
-                        ParcelFlags.DenyAnonymous |
-                        ParcelFlags.DenyAgeUnverified);
+                args.ParcelFlags |= (uint)ParcelFlags.DenyAnonymous;
+                allowedDelta |= (uint)ParcelFlags.DenyAnonymous;
             }
 
             if (allowedDelta != (uint)ParcelFlags.None)
@@ -691,6 +707,9 @@ namespace OpenSim.Region.CoreModules.World.Land
         {
             ExpireAccessList();
 
+            if (!m_scene.RegionInfo.EstateSettings.TaxFree) // region access control only
+                return false;
+
             if (m_scene.Permissions.IsAdministrator(avatar))
                 return false;
 
@@ -718,8 +737,34 @@ namespace OpenSim.Region.CoreModules.World.Land
 
         public bool IsRestrictedFromLand(UUID avatar)
         {
-            if ((LandData.Flags & (uint) ParcelFlags.UseAccessList) == 0)
+            if (!m_scene.RegionInfo.EstateSettings.TaxFree) // estate access only
                 return false;
+
+            if ((LandData.Flags & (uint) ParcelFlags.UseAccessList) == 0)
+            {
+                bool adults = m_scene.RegionInfo.EstateSettings.DoDenyMinors &&
+                    (m_scene.RegionInfo.EstateSettings.DenyMinors || ((LandData.Flags & (uint)ParcelFlags.DenyAgeUnverified) != 0));
+                bool anonymous = m_scene.RegionInfo.EstateSettings.DoDenyAnonymous &&
+                    (m_scene.RegionInfo.EstateSettings.DenyAnonymous || ((LandData.Flags & (uint)ParcelFlags.DenyAnonymous) != 0));
+                if(adults || anonymous)
+                {
+                    int userflags;
+                    if(m_scene.TryGetScenePresence(avatar, out ScenePresence snp))
+                    {
+                        if(snp.IsNPC)
+                            return false;
+                        userflags = snp.UserFlags;
+                    }
+                    else
+                        userflags = m_scene.GetUserFlags(avatar);
+
+                    if(adults && ((userflags & 32) == 0))
+                        return true;
+                    if(anonymous && ((userflags & 4) == 0))
+                        return true;
+                }
+                return false;
+            }
 
             if (m_scene.Permissions.IsAdministrator(avatar))
                 return false;

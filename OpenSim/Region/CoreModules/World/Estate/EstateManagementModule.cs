@@ -93,8 +93,8 @@ namespace OpenSim.Region.CoreModules.World.Estate
             if (config != null)
             {
                 AllowRegionRestartFromClient = config.GetBoolean("AllowRegionRestartFromClient", true);
-                m_ignoreEstateMinorAccessControl = config.GetBoolean("IgnoreEstateMinorAccessControl", false);
-                m_ignoreEstatePaymentAccessControl = config.GetBoolean("IgnoreEstatePaymentAccessControl", false);
+                m_ignoreEstateMinorAccessControl = config.GetBoolean("IgnoreEstateMinorAccessControl", true);
+                m_ignoreEstatePaymentAccessControl = config.GetBoolean("IgnoreEstatePaymentAccessControl", true);
             }
         }
 
@@ -126,7 +126,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
             UserManager = scene.RequestModuleInterface<IUserManagement>();
 
             scene.RegionInfo.EstateSettings.DoDenyMinors = !m_ignoreEstateMinorAccessControl;
-            scene.RegionInfo.EstateSettings.DoDenyAnonymous = !m_ignoreEstateMinorAccessControl;
+            scene.RegionInfo.EstateSettings.DoDenyAnonymous = !m_ignoreEstatePaymentAccessControl;
         }
 
         public void Close()
