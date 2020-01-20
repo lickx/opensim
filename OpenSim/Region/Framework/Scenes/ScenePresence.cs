@@ -195,8 +195,8 @@ namespace OpenSim.Region.Framework.Scenes
                     m_currentParcelHide = false;
 
                     ILandObject land = m_scene.LandChannel.GetLandObject(AbsolutePosition.X, AbsolutePosition.Y);
-                    if (land != null && !land.LandData.SeeAVs)
-                        m_currentParcelHide = true;
+                    if (land != null)
+                        m_currentParcelHide = !land.LandData.SeeAVs;
 
                     if (m_previusParcelUUID != UUID.Zero || checksame)
                         ParcelCrossCheck(m_currentParcelUUID, m_previusParcelUUID, m_currentParcelHide, m_previusParcelHide, oldhide,checksame);
@@ -681,7 +681,7 @@ namespace OpenSim.Region.Framework.Scenes
             get { return (IClientCore)ControllingClient; }
         }
 
-        public UUID COF { get; set; }
+        //public UUID COF { get; set; }
 
 //        public Vector3 ParentPosition { get; set; }
 
@@ -2217,7 +2217,7 @@ namespace OpenSim.Region.Framework.Scenes
                             Grouptitle = gm.GetGroupTitle(m_uuid);
 
                         //m_log.DebugFormat("[CompleteMovement] Missing Grouptitle: {0}ms", Util.EnvironmentTickCountSubtract(ts));
-
+                        /*
                         InventoryFolderBase cof = m_scene.InventoryService.GetFolderForType(client.AgentId, (FolderType)46);
                         if (cof == null)
                             COF = UUID.Zero;
@@ -2225,6 +2225,7 @@ namespace OpenSim.Region.Framework.Scenes
                             COF = cof.ID;
 
                         m_log.DebugFormat("[CompleteMovement]: Missing COF for {0} is {1}", client.AgentId, COF);
+                        */
                     }
                 }
 
@@ -3253,7 +3254,7 @@ namespace OpenSim.Region.Framework.Scenes
 //                part.ParentGroup.DeleteAvatar(UUID);
 
                 Quaternion standRotation = part.ParentGroup.RootPart.RotationOffset;
-                Vector3 sitPartWorldPosition = part.ParentGroup.AbsolutePosition + m_pos * standRotation;
+                Vector3 sitWorldPosition = part.ParentGroup.AbsolutePosition + m_pos * standRotation;
                 ControllingClient.SendClearFollowCamProperties(part.ParentUUID);
 
                 ParentID = 0;
@@ -3281,9 +3282,9 @@ namespace OpenSim.Region.Framework.Scenes
                     standRotationZ.Z = 0f;
                 }
 
-                Vector3 adjustmentForSitPose = new Vector3(0.75f, 0, m_sitAvatarHeight + .3f) * standRotationZ;
+                Vector3 adjustmentForSitPose = new Vector3(0.75f, 0, m_sitAvatarHeight * 0.5f + .1f) * standRotationZ;
 
-                Vector3 standPos = sitPartWorldPosition + adjustmentForSitPose;
+                Vector3 standPos = sitWorldPosition + adjustmentForSitPose;
                 m_pos = standPos;
 
             }
@@ -3306,7 +3307,6 @@ namespace OpenSim.Region.Framework.Scenes
             // reset to default sitAnimation
             sitAnimation = "SIT";
 
-//            Animator.TrySetMovementAnimation("STAND");
             Animator.SetMovementAnimations("STAND");
 
             TriggerScenePresenceUpdated();
@@ -3572,7 +3572,7 @@ namespace OpenSim.Region.Framework.Scenes
             m_pos = offset;
 
             ControllingClient.SendSitResponse(
-                part.ParentGroup.UUID, offset, Orientation, true, cameraAtOffset, cameraEyeOffset, forceMouselook);
+                part.ParentGroup.UUID, offset, Orientation, false, cameraAtOffset, cameraEyeOffset, forceMouselook);
 
             SendAvatarDataToAllAgents();
 
@@ -4981,7 +4981,7 @@ namespace OpenSim.Region.Framework.Scenes
 
             if(isCrossUpdate)
             {
-                cAgent.agentCOF = COF;
+                //cAgent.agentCOF = COF;
                 cAgent.ActiveGroupID = ControllingClient.ActiveGroupId;
                 cAgent.ActiveGroupName = ControllingClient.ActiveGroupName;
                 if(Grouptitle == null)
@@ -5126,7 +5126,7 @@ namespace OpenSim.Region.Framework.Scenes
             if(cAgent.ActiveGroupTitle != null)
             {
                 m_haveGroupInformation = true;
-                COF = cAgent.agentCOF;
+                //COF = cAgent.agentCOF;
                 if(ControllingClient.IsGroupMember(cAgent.ActiveGroupID))
                 {
                     ControllingClient.ActiveGroupId = cAgent.ActiveGroupID;

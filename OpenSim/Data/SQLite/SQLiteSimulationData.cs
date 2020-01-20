@@ -1057,12 +1057,10 @@ namespace OpenSim.Data.SQLite
                     if (rowToCheck["LandUUID"].ToString() == parcel.LandData.GlobalID.ToString())
                         rowsToDelete.Add(rowToCheck);
                 }
-                for (int iter = 0; iter < rowsToDelete.Count; iter++)
-                {
+                for (int iter = 0; iter < rowsToDelete.Count; ++iter)
                     rowsToDelete[iter].Delete();
-                    landaccesslist.Rows.Remove(rowsToDelete[iter]);
-                }
-                rowsToDelete.Clear();
+
+
                 foreach (LandAccessEntry entry in parcel.LandData.ParcelAccessList)
                 {
                     DataRow newAccessRow = landaccesslist.NewRow();

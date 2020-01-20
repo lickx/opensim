@@ -844,7 +844,12 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 flags |= RegionFlags.ResetHomeOnTeleport;
             if (Scene.RegionInfo.RegionSettings.FixedSun)
                 flags |= RegionFlags.SunFixed;
+
             // allow access override (was taxfree)
+            if (!Scene.RegionInfo.EstateSettings.TaxFree) // this is now wrong means !ALLOW_ACCESS_OVERRIDE
+                //flags |= RegionFlags.AllowParcelAccessOverride;
+                flags |= RegionFlags.TaxFree;
+
             if (Scene.RegionInfo.RegionSettings.BlockTerraform)
                 flags |= RegionFlags.BlockTerraform;
             if (!Scene.RegionInfo.RegionSettings.AllowLandResell)
@@ -3589,7 +3594,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             Transfer.TransferInfo.Size = req.AssetInf.Data.Length;
             Transfer.TransferInfo.TransferID = req.TransferRequestID;
             Transfer.Header.Zerocoded = true;
-            OutPacket(Transfer, isWearable ? ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority : ThrottleOutPacketType.Asset);
+            OutPacket(Transfer, ThrottleOutPacketType.Asset);
 
             if (req.NumPackets == 1)
             {
@@ -3600,7 +3605,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 TransferPacket.TransferData.Data = req.AssetInf.Data;
                 TransferPacket.TransferData.Status = 1;
                 TransferPacket.Header.Zerocoded = true;
-                OutPacket(TransferPacket, isWearable ? ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority : ThrottleOutPacketType.Asset);
+                OutPacket(TransferPacket, ThrottleOutPacketType.Asset);
             }
             else
             {
@@ -3633,7 +3638,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         TransferPacket.TransferData.Status = 1;
                     }
                     TransferPacket.Header.Zerocoded = true;
-                    OutPacket(TransferPacket, isWearable ? ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority : ThrottleOutPacketType.Asset);
+                    OutPacket(TransferPacket, ThrottleOutPacketType.Asset);
 
                     processedLength += chunkSize;
                     packetNumber++;
@@ -4430,7 +4435,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                         }
                     }
 
-            OutPacket(aw, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
+            OutPacket(aw, ThrottleOutPacketType.Task);
         }
 
         static private readonly byte[] AvatarAppearanceHeader = new byte[] {
@@ -4482,7 +4487,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             Utils.FloatToBytesSafepos(hover, data, pos); pos += 4;
 
             buf.DataLength = pos;
-            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority, null, true);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task, null, true);
         }
 
         static private readonly byte[] AvatarAnimationHeader = new byte[] {
@@ -4557,7 +4562,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             data[pos++] = 0; // no physical avatar events
 
             buf.DataLength = pos;
-            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task | ThrottleOutPacketType.HighPriority);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
         }
 
         public void SendObjectAnimations(UUID[] animations, int[] seqs, UUID senderId)
@@ -4604,17 +4609,13 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             zc.AddByte(1); // block count
 
-            ThrottleOutPacketType ptype = ThrottleOutPacketType.Task;
             if (ent is ScenePresence)
-            {
                 CreateAvatarUpdateBlock(ent as ScenePresence, zc);
-                ptype |= ThrottleOutPacketType.HighPriority;
-            }
             else
                 CreatePrimUpdateBlock(ent as SceneObjectPart, (ScenePresence)SceneAgent, zc);
 
             buf.DataLength = zc.Finish();
-            m_udpServer.SendUDPPacket(m_udpClient, buf, ptype);
+            m_udpServer.SendUDPPacket(m_udpClient, buf, ThrottleOutPacketType.Task);
         }
 
         public void SendEntityTerseUpdateImmediate(ISceneEntity ent)
@@ -6558,9 +6559,7 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             LLSDxmlEncode.AddElem("PassPrice", landData.PassPrice, sb);
             LLSDxmlEncode.AddElem("PublicCount", (int)0, sb); //TODO
             LLSDxmlEncode.AddElem("RegionDenyAnonymous", (regionFlags & (uint)RegionFlags.DenyAnonymous) != 0, sb);
-            //LLSDxmlEncode.AddElem("RegionDenyIdentified", (regionFlags & (uint)RegionFlags.DenyIdentified) != 0, sb);
             LLSDxmlEncode.AddElem("RegionDenyIdentified", false, sb);
-            //LLSDxmlEncode.AddElem("RegionDenyTransacted", (regionFlags & (uint)RegionFlags.DenyTransacted) != 0, sb);
             LLSDxmlEncode.AddElem("RegionDenyTransacted", false, sb);
             LLSDxmlEncode.AddElem("RegionPushOverride", (regionFlags & (uint)RegionFlags.RestrictPushObject) != 0, sb);
             LLSDxmlEncode.AddElem("RentPrice", (int) 0, sb);;
@@ -6600,17 +6599,16 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             LLSDxmlEncode.AddArrayAndMap("AgeVerificationBlock", sb);
 
-            //LLSDxmlEncode.AddElem("RegionDenyAgeUnverified", (regionFlags & (uint)RegionFlags.DenyAgeUnverified) != 0, sb);
-            LLSDxmlEncode.AddElem("RegionDenyAgeUnverified", false, sb);
+            LLSDxmlEncode.AddElem("RegionDenyAgeUnverified", (regionFlags & (uint)RegionFlags.DenyAgeUnverified) != 0, sb);
 
             LLSDxmlEncode.AddEndMapAndArray(sb);
 
             LLSDxmlEncode.AddArrayAndMap("ParcelEnvironmentBlock", sb);
             LLSDxmlEncode.AddElem("ParcelEnvironmentVersion", -1, sb);
-            LLSDxmlEncode.AddElem("RegionAllowEnvironmentOverride", false, sb);
+            LLSDxmlEncode.AddElem("RegionAllowEnvironmentOverride", true, sb);
             LLSDxmlEncode.AddEndMapAndArray(sb);
 
-            bool accessovr = Scene.RegionInfo.EstateSettings.TaxFree;
+            bool accessovr = !Scene.RegionInfo.EstateSettings.TaxFree;
             LLSDxmlEncode.AddArrayAndMap("RegionAllowAccessBlock", sb);
             LLSDxmlEncode.AddElem("RegionAllowAccessOverride", accessovr, sb);
             LLSDxmlEncode.AddEndMapAndArray(sb);
