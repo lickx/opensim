@@ -291,7 +291,7 @@ namespace OpenSim.Region.Framework.Scenes
         private Quaternion m_lastRotation;
         private Vector3 m_lastVelocity;
         private Vector3 m_lastSize = new Vector3(0.45f,0.6f,1.9f);
-        private int NeedInitialData = -1;
+        private int NeedInitialData = 1;
 
         private int m_userFlags;
         public int UserFlags
@@ -2670,7 +2670,7 @@ namespace OpenSim.Region.Framework.Scenes
             {
 //                m_log.DebugFormat("[SCENE PRESENCE]: Initial body rotation {0} for {1}", agentData.BodyRotation, Name);
                 bool update_rotation = false;
-                if (agentData.BodyRotation != Rotation)
+                if (!IsSatOnObject && agentData.BodyRotation != Rotation)
                 {
                     Rotation = agentData.BodyRotation;
                     update_rotation = true;
@@ -3251,46 +3251,67 @@ namespace OpenSim.Region.Framework.Scenes
                     }
                 }
 
-//                part.ParentGroup.DeleteAvatar(UUID);
-
-                Quaternion standRotation = part.ParentGroup.RootPart.RotationOffset;
-                Vector3 sitWorldPosition = part.ParentGroup.AbsolutePosition + m_pos * standRotation;
                 ControllingClient.SendClearFollowCamProperties(part.ParentUUID);
 
                 ParentID = 0;
                 ParentPart = null;
 
-                if (part.SitTargetAvatar == UUID)
-                    standRotation = standRotation * part.SitTargetOrientation;
-                else
-                    standRotation = standRotation * m_bodyRot;
+                Quaternion standRotation = part.ParentGroup.RootPart.RotationOffset;
+                Vector3 sitWorldPosition = part.ParentGroup.AbsolutePosition + m_pos * standRotation;
 
+                standRotation = standRotation * m_bodyRot;
                 m_bodyRot = standRotation;
 
-                Quaternion standRotationZ = new Quaternion(0,0,standRotation.Z,standRotation.W);
-
-                float t = standRotationZ.W * standRotationZ.W + standRotationZ.Z * standRotationZ.Z;
-                if (t > 0)
+                Quaternion standRotationZ;
+                Vector3 adjustmentForSitPose = part.StandOffset;
+                if (adjustmentForSitPose.X == 0 &&
+                    adjustmentForSitPose.Y == 0 &&
+                    adjustmentForSitPose.Z == 0)
                 {
-                    t = 1.0f / (float)Math.Sqrt(t);
-                    standRotationZ.W *= t;
-                    standRotationZ.Z *= t;
+                    standRotationZ = new Quaternion(0, 0, standRotation.Z, standRotation.W);
+                    float t = standRotationZ.W * standRotationZ.W + standRotationZ.Z * standRotationZ.Z;
+                    if (t > 0)
+                    {
+                        t = 1.0f / (float)Math.Sqrt(t);
+                        standRotationZ.W *= t;
+                        standRotationZ.Z *= t;
+                    }
+                    else
+                    {
+                        standRotationZ.W = 1.0f;
+                        standRotationZ.Z = 0f;
+                    }
+                    adjustmentForSitPose = new Vector3(0.65f, 0, m_sitAvatarHeight * 0.5f + .1f) * standRotationZ;
                 }
                 else
                 {
-                    standRotationZ.W = 1.0f;
-                    standRotationZ.Z = 0f;
+                    sitWorldPosition = part.GetWorldPosition();
+
+                    standRotation = part.GetWorldRotation();
+                    standRotationZ = new Quaternion(0, 0, standRotation.Z, standRotation.W);
+                    float t = standRotationZ.W * standRotationZ.W + standRotationZ.Z * standRotationZ.Z;
+                    if (t > 0)
+                    {
+                        t = 1.0f / (float)Math.Sqrt(t);
+                        standRotationZ.W *= t;
+                        standRotationZ.Z *= t;
+                    }
+                    else
+                    {
+                        standRotationZ.W = 1.0f;
+                        standRotationZ.Z = 0f;
+                    }
+                    adjustmentForSitPose *= standRotationZ;
+
+                    if (Appearance != null && Appearance.AvatarHeight > 0)
+                        adjustmentForSitPose.Z += 0.5f * Appearance.AvatarHeight + .1f;
+                    else
+                        adjustmentForSitPose.Z += .9f;
                 }
 
-                Vector3 adjustmentForSitPose = new Vector3(0.75f, 0, m_sitAvatarHeight * 0.5f + .1f) * standRotationZ;
-
-                Vector3 standPos = sitWorldPosition + adjustmentForSitPose;
-                m_pos = standPos;
-
+                m_pos = sitWorldPosition + adjustmentForSitPose;
             }
 
-            // We need to wait until we have calculated proper stand positions before sitting up the physical
-            // avatar to avoid race conditions.
             if (PhysicsActor == null)
                 AddToPhysicalScene(false);
 
@@ -3299,7 +3320,7 @@ namespace OpenSim.Region.Framework.Scenes
                 m_requestedSitTargetID = 0;
                 part.RemoveSittingAvatar(this);
                 part.ParentGroup.TriggerScriptChangedEvent(Changed.LINK);
-
+                
                 SendAvatarDataToAllAgents();
                 m_scene.EventManager.TriggerParcelPrimCountTainted(); // update select/ sat on
             }
@@ -3335,7 +3356,7 @@ namespace OpenSim.Region.Framework.Scenes
             //look for prims with explicit sit targets that are available
             foreach (SceneObjectPart part in partArray)
             {
-                if (part.IsSitTargetSet && part.SitTargetAvatar == UUID.Zero)
+                if (part.IsSitTargetSet && part.SitTargetAvatar == UUID.Zero && part.SitActiveRange > 0)
                 {
                     //switch the target to this prim
                     return part;
@@ -3356,85 +3377,84 @@ namespace OpenSim.Region.Framework.Scenes
             if (part == null)
                 return;
 
+            float range = part.SitActiveRange;
+            if (range < 0)
+                return;
+
+            Vector3 pos = part.AbsolutePosition + offset;
+            if (range > 1e-5f)
+            {
+                if (Vector3.DistanceSquared(AbsolutePosition, pos) > range * range)
+                    return;
+            }
+
             if (PhysicsActor != null)
                 m_sitAvatarHeight = PhysicsActor.Size.Z * 0.5f;
-
-            bool canSit = false;
 
             if (part.IsSitTargetSet && part.SitTargetAvatar == UUID.Zero)
             {
                 offset = part.SitTargetPosition;
                 sitOrientation = part.SitTargetOrientation;
-
-                canSit = true;
             }
             else
             {
                 if (PhysicsSit(part,offset)) // physics engine
                     return;
 
-                Vector3 pos = part.AbsolutePosition + offset;
+                if (Vector3.DistanceSquared(AbsolutePosition, pos) > 100f)
+                    return;
 
-                if (Util.GetDistanceTo(AbsolutePosition, pos) <= 10)
-                {
-                    AbsolutePosition = pos + new Vector3(0.0f, 0.0f, m_sitAvatarHeight);
-                    canSit = true;
-                }
+                AbsolutePosition = pos + new Vector3(0.0f, 0.0f, m_sitAvatarHeight);
             }
 
-            if (canSit)
+            if (PhysicsActor != null)
+                RemoveFromPhysicalScene();
+
+            if (m_movingToTarget)
+                ResetMoveToTarget();
+
+            Velocity = Vector3.Zero;
+            m_AngularVelocity = Vector3.Zero;
+
+            part.AddSittingAvatar(this);
+
+            cameraAtOffset = part.GetCameraAtOffset();
+            cameraEyeOffset = part.GetCameraEyeOffset();
+
+            forceMouselook = part.GetForceMouselook();
+
+            if (!part.IsRoot)
             {
-                if (PhysicsActor != null)
+                sitOrientation = part.RotationOffset * sitOrientation;
+                offset = offset * part.RotationOffset;
+                offset += part.OffsetPosition;
+
+                if (cameraAtOffset == Vector3.Zero && cameraEyeOffset == Vector3.Zero)
                 {
-                    // We can remove the physicsActor until they stand up.
-                    RemoveFromPhysicalScene();
+                    cameraAtOffset = part.ParentGroup.RootPart.GetCameraAtOffset();
+                    cameraEyeOffset = part.ParentGroup.RootPart.GetCameraEyeOffset();
                 }
-
-                if (m_movingToTarget)
-                    ResetMoveToTarget();
-
-                Velocity = Vector3.Zero;
-                m_AngularVelocity = Vector3.Zero;
-
-                part.AddSittingAvatar(this);
-
-                cameraAtOffset = part.GetCameraAtOffset();
-                cameraEyeOffset = part.GetCameraEyeOffset();
-
-                forceMouselook = part.GetForceMouselook();
-
-                if (!part.IsRoot)
+                else
                 {
-                    sitOrientation = part.RotationOffset * sitOrientation;
-                    offset = offset * part.RotationOffset;
-                    offset += part.OffsetPosition;
-
-                    if (cameraAtOffset == Vector3.Zero && cameraEyeOffset == Vector3.Zero)
-                    {
-                        cameraAtOffset = part.ParentGroup.RootPart.GetCameraAtOffset();
-                        cameraEyeOffset = part.ParentGroup.RootPart.GetCameraEyeOffset();
-                    }
-                    else
-                    {
-                        cameraAtOffset = cameraAtOffset * part.RotationOffset;
-                        cameraAtOffset += part.OffsetPosition;
-                        cameraEyeOffset = cameraEyeOffset * part.RotationOffset;
-                        cameraEyeOffset += part.OffsetPosition;
-                    }
+                    cameraAtOffset = cameraAtOffset * part.RotationOffset;
+                    cameraAtOffset += part.OffsetPosition;
+                    cameraEyeOffset = cameraEyeOffset * part.RotationOffset;
+                    cameraEyeOffset += part.OffsetPosition;
                 }
-
-                ControllingClient.SendSitResponse(
-                    part.ParentGroup.UUID, offset, sitOrientation, false, cameraAtOffset, cameraEyeOffset, forceMouselook);
-
-                m_requestedSitTargetUUID = part.UUID;
-
-                HandleAgentSit(ControllingClient, UUID);
-
-                // Moved here to avoid a race with default sit anim
-                // The script event needs to be raised after the default sit anim is set.
-                part.ParentGroup.TriggerScriptChangedEvent(Changed.LINK);
-                m_scene.EventManager.TriggerParcelPrimCountTainted(); // update select/ sat on
             }
+
+            ControllingClient.SendSitResponse(
+                part.ParentGroup.UUID, offset, sitOrientation * part.ParentGroup.RootPart.RotationOffset,
+                    true, cameraAtOffset, cameraEyeOffset, forceMouselook);
+
+            m_requestedSitTargetUUID = part.UUID;
+
+            HandleAgentSit(ControllingClient, UUID);
+
+            // Moved here to avoid a race with default sit anim
+            // The script event needs to be raised after the default sit anim is set.
+            //part.ParentGroup.TriggerScriptChangedEvent(Changed.LINK);
+            //m_scene.EventManager.TriggerParcelPrimCountTainted(); // update select/ sat on
         }
 
         public void HandleAgentRequestSit(IClientAPI remoteClient, UUID agentID, UUID targetID, Vector3 offset)
@@ -3477,13 +3497,13 @@ namespace OpenSim.Region.Framework.Scenes
             if (part.PhysActor == null)
             {
                 // none physcis shape
-                if (part.PhysicsShapeType == (byte)PhysicsShapeType.None)
+                //if (part.PhysicsShapeType == (byte)PhysicsShapeType.None)
                     ControllingClient.SendAlertMessage(" There is no suitable surface to sit on, try another spot.");
-                else
-                { // non physical phantom  TODO
-//                    ControllingClient.SendAlertMessage(" There is no suitable surface to sit on, try another spot.");
-                    return false;
-                }
+                //else
+                //{ // non physical phantom  TODO
+                    //ControllingClient.SendAlertMessage(" There is no suitable surface to sit on, try another spot.");
+                //    return false;
+                //}
                 return true;
             }
 
@@ -3546,7 +3566,6 @@ namespace OpenSim.Region.Framework.Scenes
 
             Vector3 cameraAtOffset = part.GetCameraAtOffset();
             Vector3 cameraEyeOffset = part.GetCameraEyeOffset();
-            bool forceMouselook = part.GetForceMouselook();
 
             if (!part.IsRoot)
             {
@@ -3571,8 +3590,10 @@ namespace OpenSim.Region.Framework.Scenes
             m_bodyRot = Orientation;
             m_pos = offset;
 
+            Orientation *= part.ParentGroup.RootPart.RotationOffset;
+
             ControllingClient.SendSitResponse(
-                part.ParentGroup.UUID, offset, Orientation, false, cameraAtOffset, cameraEyeOffset, forceMouselook);
+                part.ParentGroup.UUID, offset, Orientation, true, cameraAtOffset, cameraEyeOffset, part.GetForceMouselook());
 
             SendAvatarDataToAllAgents();
 
@@ -3591,7 +3612,10 @@ namespace OpenSim.Region.Framework.Scenes
             if (IsChildAgent)
                 return;
 
-             SceneObjectPart part = m_scene.GetSceneObjectPart(m_requestedSitTargetID);
+            if(SitGround || IsSatOnObject)
+                return;
+
+            SceneObjectPart part = m_scene.GetSceneObjectPart(m_requestedSitTargetID);
 
             if (part != null)
             {
@@ -3603,6 +3627,8 @@ namespace OpenSim.Region.Framework.Scenes
 
                     return;
                 }
+
+                RemoveFromPhysicalScene();
 
                 if (part.SitTargetAvatar == UUID)
                 {
@@ -3618,6 +3644,7 @@ namespace OpenSim.Region.Framework.Scenes
                     Quaternion r = sitTargetOrient;
 
                     Vector3 newPos;
+                    Quaternion newRot;
 
                     if (LegacySitOffsets)
                     {
@@ -3684,8 +3711,6 @@ namespace OpenSim.Region.Framework.Scenes
                         newPos = sitTargetPos + sitOffset + SIT_TARGET_ADJUSTMENT;
                     }
 
-                    Quaternion newRot;
-
                     if (part.IsRoot)
                     {
                         newRot = sitTargetOrient;
@@ -3697,30 +3722,22 @@ namespace OpenSim.Region.Framework.Scenes
                     }
 
                     newPos += part.OffsetPosition;
-
                     m_pos = newPos;
                     Rotation = newRot;
 
-//                    ParentPosition = part.AbsolutePosition;
+                    //                    ParentPosition = part.AbsolutePosition;
                 }
                 else
                 {
                     // An viewer expects to specify sit positions as offsets to the root prim, even if a child prim is
                     // being sat upon.
                     m_pos -= part.GroupPosition;
-
-//                    ParentPosition = part.AbsolutePosition;
-
-//                        m_log.DebugFormat(
-//                            "[SCENE PRESENCE]: Sitting {0} at position {1} ({2} + {3}) on part {4} {5} without sit target",
-//                            Name, part.AbsolutePosition, m_pos, ParentPosition, part.Name, part.LocalId);
                 }
 
                 part.AddSittingAvatar(this);
                 ParentPart = part;
                 ParentID = m_requestedSitTargetID;
 
-                RemoveFromPhysicalScene();
                 m_AngularVelocity = Vector3.Zero;
                 Velocity = Vector3.Zero;
 
@@ -3728,14 +3745,15 @@ namespace OpenSim.Region.Framework.Scenes
 
                 SendAvatarDataToAllAgents();
 
-                sitAnimation = "SIT";
-                if (!String.IsNullOrEmpty(part.SitAnimation))
-                {
+                if (String.IsNullOrEmpty(part.SitAnimation))
+                    sitAnimation = "SIT";
+                else
                     sitAnimation = part.SitAnimation;
-                }
-//                Animator.TrySetMovementAnimation(sitAnimation);
+
                 Animator.SetMovementAnimations("SIT");
-                TriggerScenePresenceUpdated();
+//                TriggerScenePresenceUpdated();
+                part.ParentGroup.TriggerScriptChangedEvent(Changed.LINK);
+                m_scene.EventManager.TriggerParcelPrimCountTainted(); // update select/ sat on
             }
         }
 
@@ -4060,25 +4078,22 @@ namespace OpenSim.Region.Framework.Scenes
                 if(m_gotRegionHandShake)
                     return;
                 m_gotRegionHandShake = true;
-                NeedInitialData = 1;
+                NeedInitialData = 2;
             }
         }
 
         private void SendInitialData()
         {
             uint flags = ControllingClient.GetViewerCaps();
-            if((flags & 0x1000) == 0) // wait for seeds sending
+            if ((flags & 0x1000) == 0) // wait for seeds sending
                 return;
 
-//            lock (m_completeMovementLock)
-            {
-                if(NeedInitialData < 0)
-                    return;
+            if (NeedInitialData < 2)
+                return;
 
-                // give some extra time to make sure viewers did process seeds
-                if(++NeedInitialData < 4) // needs fix if update rate changes on heartbeat
-                    return;
-            }
+            // give some extra time to make sure viewers did process seeds
+            if (++NeedInitialData < 6) // needs fix if update rate changes on heartbeat
+               return;
 
             NeedInitialData = -1;
 

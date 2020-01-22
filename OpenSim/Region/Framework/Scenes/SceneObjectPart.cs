@@ -1256,6 +1256,9 @@ namespace OpenSim.Region.Framework.Scenes
             set { m_sitTargetOrientation = value; }
         }
 
+        public float SitActiveRange { get; set;}
+        public Vector3 StandOffset { get; set;}
+
         public bool Stopped
         {
             get {
