@@ -5679,7 +5679,31 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             if (v > 128f)
                 v = 128f;
+            float old = m_host.SitActiveRange;
             m_host.SitActiveRange = (float)v;
+            if(old != (float)v)
+                m_host.ParentGroup.HasGroupChanged = true;
+        }
+
+        public void osSetLinkSitActiveRange(LSL_Integer linkNumber, LSL_Float v)
+        {
+            if (v > 128f)
+                v = 128f;
+
+            bool changed = false;
+            InitLSL();
+            List<SceneObjectPart> parts = m_LSL_Api.GetLinkParts(linkNumber);
+            for(int i = 0; i < parts.Count; ++i)
+            {
+                SceneObjectPart sop = parts[i];
+                float old = sop.SitActiveRange;
+                sop.SitActiveRange = (float)v;
+                if (old != (float)v)
+                    changed = true;
+            }
+
+            if (changed)
+                m_host.ParentGroup.HasGroupChanged = true;
         }
 
         public LSL_Float osGetSitActiveRange()
@@ -5687,15 +5711,68 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return m_host.SitActiveRange;
         }
 
+        public LSL_Float osGetLinkSitActiveRange(LSL_Integer linkNumber)
+        {
+            if (linkNumber == ScriptBaseClass.LINK_THIS)
+                return m_host.SitActiveRange;
+            if (linkNumber < 0)
+                return int.MinValue;
+            if (linkNumber < 2)
+                return m_host.ParentGroup.RootPart.SitActiveRange;
+            SceneObjectPart target = m_host.ParentGroup.GetLinkNumPart(linkNumber);
+            if (target == null)
+                return int.MinValue;
+            return target.SitActiveRange;
+        }
+
         public void osSetStandTarget(LSL_Vector v)
         {
             // todo add limits ?
+            Vector3 old = m_host.StandOffset;
             m_host.StandOffset = v;
+            if(!old.ApproxEquals(v))
+                m_host.ParentGroup.HasGroupChanged = true;
+        }
+
+        public void osSetLinkStandTarget(LSL_Integer linkNumber, LSL_Vector v)
+        {
+            // todo add limits ?
+            SceneObjectPart target = null;
+            if (linkNumber == ScriptBaseClass.LINK_THIS)
+                target = m_host;
+            else if (linkNumber < 0)
+                return;
+            else if (linkNumber < 2)
+                target = m_host.ParentGroup.RootPart;
+            else
+                target = m_host.ParentGroup.GetLinkNumPart(linkNumber);
+
+            if (target == null)
+                return;
+
+            Vector3 old = target.StandOffset;
+            target.StandOffset = v;
+            if (!old.ApproxEquals(v))
+                m_host.ParentGroup.HasGroupChanged = true;
         }
 
         public LSL_Vector osGetStandTarget()
         {
             return m_host.StandOffset;
+        }
+
+        public LSL_Vector osGetLinkStandTarget(LSL_Integer linkNumber)
+        {
+            if (linkNumber == ScriptBaseClass.LINK_THIS)
+                return m_host.StandOffset;
+            if (linkNumber < 0)
+                return Vector3.Zero;
+            if (linkNumber < 2)
+                return m_host.ParentGroup.RootPart.StandOffset;
+            SceneObjectPart target = m_host.ParentGroup.GetLinkNumPart(linkNumber);
+            if (target == null)
+                return Vector3.Zero;
+            return target.StandOffset;
         }
     }
 }
