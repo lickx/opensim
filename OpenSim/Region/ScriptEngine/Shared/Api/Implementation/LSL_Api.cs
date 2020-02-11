@@ -10661,8 +10661,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             FaceMaterial mat = null;
             UUID oldid = texface.MaterialID;
-
-            if(oldid != UUID.Zero)
+            if (oldid == UUID.Zero)
+            {
+                if (materialAlphaMode == 1)
+                    return false;
+            }
+            else
                 mat = m_materialsModule.GetMaterialCopy(oldid);
 
             if(mat == null)
@@ -10671,7 +10675,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             mat.DiffuseAlphaMode = (byte)materialAlphaMode;
             mat.AlphaMaskCutoff = (byte)materialMaskCutoff;
 
-            UUID id = m_materialsModule.AddNewMaterial(mat);
+            UUID id = m_materialsModule.AddNewMaterial(mat); // id is a hash of entire material hash, so this means no change
             if(oldid == id)
                 return false;
 
@@ -10715,23 +10719,26 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             FaceMaterial mat = null;
             UUID oldid = texface.MaterialID;
 
-            if(mapID != UUID.Zero)
+            if (oldid == UUID.Zero)
             {
-                if(oldid != UUID.Zero)
-                    mat = m_materialsModule.GetMaterialCopy(oldid);
-
-                if(mat == null)
-                    mat = new FaceMaterial();
-
-                mat.NormalMapID = mapID;
-                mat.NormalOffsetX = offsetX;
-                mat.NormalOffsetY = offsetY;
-                mat.NormalRepeatX = repeatX;
-                mat.NormalRepeatY = repeatY;
-                mat.NormalRotation = rot;
-
-                mapID = m_materialsModule.AddNewMaterial(mat);
+                if (mapID == UUID.Zero)
+                    return false;
             }
+            else
+                mat = m_materialsModule.GetMaterialCopy(oldid);
+
+            if(mat == null)
+                mat = new FaceMaterial();
+
+            mat.NormalMapID = mapID;
+            mat.NormalOffsetX = offsetX;
+            mat.NormalOffsetY = offsetY;
+            mat.NormalRepeatX = repeatX;
+            mat.NormalRepeatY = repeatY;
+            mat.NormalRotation = rot;
+
+            mapID = m_materialsModule.AddNewMaterial(mat);
+
             if(oldid == mapID)
                 return false;
 
@@ -10780,28 +10787,30 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             FaceMaterial mat = null;
             UUID oldid = texface.MaterialID;
 
-            if (mapID != UUID.Zero)
+            if(oldid == UUID.Zero)
             {
-                if (oldid != UUID.Zero)
-                    mat = m_materialsModule.GetMaterialCopy(oldid);
-
-                if (mat == null)
-                    mat = new FaceMaterial();
-
-                mat.SpecularMapID = mapID;
-                mat.SpecularOffsetX = offsetX;
-                mat.SpecularOffsetY = offsetY;
-                mat.SpecularRepeatX = repeatX;
-                mat.SpecularRepeatY = repeatY;
-                mat.SpecularRotation = rot;
-                mat.SpecularLightColorR = colorR;
-                mat.SpecularLightColorG = colorG;
-                mat.SpecularLightColorB = colorB;
-                mat.SpecularLightExponent = gloss;
-                mat.EnvironmentIntensity = env;
-
-                mapID = m_materialsModule.AddNewMaterial(mat);
+                if(mapID == UUID.Zero)
+                    return false;
             }
+            else
+                mat = m_materialsModule.GetMaterialCopy(oldid);
+
+            if (mat == null)
+                mat = new FaceMaterial();
+
+            mat.SpecularMapID = mapID;
+            mat.SpecularOffsetX = offsetX;
+            mat.SpecularOffsetY = offsetY;
+            mat.SpecularRepeatX = repeatX;
+            mat.SpecularRepeatY = repeatY;
+            mat.SpecularRotation = rot;
+            mat.SpecularLightColorR = colorR;
+            mat.SpecularLightColorG = colorG;
+            mat.SpecularLightColorB = colorB;
+            mat.SpecularLightExponent = gloss;
+            mat.EnvironmentIntensity = env;
+
+            mapID = m_materialsModule.AddNewMaterial(mat);
 
             if(oldid == mapID)
                 return false;
@@ -18216,14 +18225,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 Notecard nc = new Notecard();
                 nc.lastRef = DateTime.Now;
-                try
-                {
-                    nc.text = SLUtil.ParseNotecardToArray(text);
-                }
-                catch(SLUtil.NotANotecardFormatException)
-                {
-                    nc.text = new string[0];
-                }
+                nc.text = SLUtil.ParseNotecardToArray(text);
                 m_Notecards[assetID] = nc;
             }
         }

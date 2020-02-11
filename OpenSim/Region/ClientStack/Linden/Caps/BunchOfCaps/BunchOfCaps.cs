@@ -1420,6 +1420,8 @@ namespace OpenSim.Region.ClientStack.Linden
                                              IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
         {
             InventoryItemBase copyItem = null;
+            IClientAPI client = null;
+
             try
             {
                 OSDMap content = (OSDMap)OSDParser.DeserializeLLSDXml(request);
@@ -1430,47 +1432,167 @@ namespace OpenSim.Region.ClientStack.Linden
 
                 //  m_log.InfoFormat("[CAPS]: CopyInventoryFromNotecard, FolderID:{0}, ItemID:{1}, NotecardID:{2}, ObjectID:{3}", folderID, itemID, notecardID, objectID);
 
+                UUID noteAssetID = UUID.Zero;
+                UUID agentID = m_HostCapsObj.AgentID;
+
+                m_Scene.TryGetClient(agentID, out client);
+
                 if (objectID != UUID.Zero)
                 {
                     SceneObjectPart part = m_Scene.GetSceneObjectPart(objectID);
-                    if (part != null)
-                    {
-//                        TaskInventoryItem taskItem = part.Inventory.GetInventoryItem(notecardID);
-                        if (!m_Scene.Permissions.CanCopyObjectInventory(notecardID, objectID, m_HostCapsObj.AgentID))
-                            return CopyInventoryFromNotecardError(httpResponse);
-                    }
-                }
+                    if(part == null)
+                        throw new Exception("find object with notecard item" + notecardID.ToString());
 
-                InventoryItemBase item = null;
-                IClientAPI client = null;
+                    if (!m_Scene.Permissions.CanCopyObjectInventory(notecardID, objectID, agentID))
+                        return CopyInventoryFromNotecardError(httpResponse);
 
-                m_Scene.TryGetClient(m_HostCapsObj.AgentID, out client);
-                item = m_Scene.InventoryService.GetItem(m_HostCapsObj.AgentID, itemID);
-                if (item != null)
-                {
-                    string message;
-                    copyItem = m_Scene.GiveInventoryItem(m_HostCapsObj.AgentID, item.Owner, itemID, folderID, out message);
-                    if (copyItem != null && client != null)
-                    {
-                        m_log.InfoFormat("[CAPS]: CopyInventoryFromNotecard, ItemID:{0}, FolderID:{1}", copyItem.ID, copyItem.Folder);
-                        client.SendBulkUpdateInventory(copyItem);
-                    }
+                    TaskInventoryItem taskItem = part.Inventory.GetInventoryItem(notecardID);
+                    if(taskItem == null || taskItem.AssetID == UUID.Zero)
+                        throw new Exception("Failed to find notecard item" + notecardID.ToString());
+                    noteAssetID = taskItem.AssetID;
                 }
                 else
                 {
-                    m_log.ErrorFormat("[CAPS]: CopyInventoryFromNotecard - Failed to retrieve item {0} from notecard {1}", itemID, notecardID);
-                    if (client != null)
-                        client.SendAlertMessage("Failed to retrieve item");
+                    // we may have the item around...
+                    InventoryItemBase localitem = m_Scene.InventoryService.GetItem(agentID, itemID);
+                    if (localitem != null)
+                    {
+                        string message;
+                        copyItem = m_Scene.GiveInventoryItem(agentID, localitem.Owner, itemID, folderID, out message);
+                        if (copyItem == null)
+                            throw new Exception("Failed to find notecard item" + notecardID.ToString());
+
+                        m_log.InfoFormat("[CAPS]: CopyInventoryFromNotecard, ItemID:{0}, FolderID:{1}", copyItem.ID, copyItem.Folder);
+                        if (client != null)
+                            client.SendBulkUpdateInventory(copyItem);
+                        return "";
+                    }
+
+                    if (notecardID != UUID.Zero)
+                    {
+                        InventoryItemBase noteItem = m_Scene.InventoryService.GetItem(agentID, notecardID);
+                        if (noteItem == null || noteItem.AssetID == UUID.Zero)
+                            throw new Exception("Failed to find notecard item" + notecardID.ToString());
+                        noteAssetID = noteItem.AssetID;
+                    }
                 }
+
+                AssetBase noteAsset = m_Scene.AssetService.Get(noteAssetID.ToString());
+                if (noteAsset == null || noteAsset.Type != (sbyte)AssetType.Notecard)
+                    throw new Exception("Failed to find the notecard asset" + notecardID.ToString());
+
+                InventoryItemBase item = SLUtil.GetEmbeddedItem(noteAsset.Data, itemID);
+                if(item == null)
+                    throw new Exception("Failed to find the notecard item" + notecardID.ToString());
+
+                if (!m_Scene.Permissions.CanTransferUserInventory(itemID, item.Owner, agentID))
+                    throw new Exception("Notecard item permissions check fail" + notecardID.ToString());
+
+                if (!m_Scene.Permissions.BypassPermissions())
+                {
+                    if ((item.CurrentPermissions & (uint)PermissionMask.Transfer) == 0)
+                        throw new Exception("Notecard item permissions check fail" + notecardID.ToString());
+                }
+
+                // check if we do have the item asset
+                noteAsset = m_Scene.AssetService.Get(item.AssetID.ToString());
+                if (noteAsset == null)
+                    throw new Exception("Failed to find the notecard " + notecardID.ToString() +" item asset");
+
+                // find where to put it
+                InventoryFolderBase folder = null;
+                if (folderID != UUID.Zero)
+                    folder = m_Scene.InventoryService.GetFolder(agentID, folderID);
+
+                if (folder == null && Enum.IsDefined(typeof(FolderType), (sbyte)item.AssetType))
+                    folder = m_Scene.InventoryService.GetFolderForType(agentID, (FolderType)item.AssetType);
+
+                if (folder == null)
+                    folder = m_Scene.InventoryService.GetRootFolder(agentID);
+
+                if (folder == null)
+                    throw new Exception("Failed to find a folder for the notecard item" + notecardID.ToString());
+
+                item.Folder = folder.ID;
+
+                // do change owner permissions (c&p from scene inventory code)
+                if (m_Scene.Permissions.PropagatePermissions() && item.Owner != agentID)
+                {
+                    uint permsMask = ~((uint)PermissionMask.Copy |
+                                        (uint)PermissionMask.Transfer |
+                                        (uint)PermissionMask.Modify |
+                                        (uint)PermissionMask.Export);
+
+                    uint nextPerms = permsMask | (item.NextPermissions &
+                                        ((uint)PermissionMask.Copy |
+                                        (uint)PermissionMask.Transfer |
+                                        (uint)PermissionMask.Modify));
+
+                    if (nextPerms == permsMask)
+                        nextPerms |= (uint)PermissionMask.Transfer;
+
+                    uint basePerms = item.BasePermissions | (uint)PermissionMask.Move;
+                    uint ownerPerms = item.CurrentPermissions;
+
+                    uint foldedPerms = (item.CurrentPermissions & (uint)PermissionMask.FoldedMask) << (int)PermissionMask.FoldingShift;
+                    if (foldedPerms != 0 && item.InvType == (int)InventoryType.Object)
+                    {
+                        foldedPerms |= permsMask;
+
+                        bool isRootMod = (item.CurrentPermissions &
+                                            (uint)PermissionMask.Modify) != 0 ?
+                                            true : false;
+
+                        ownerPerms &= foldedPerms;
+                        basePerms &= foldedPerms;
+
+                        if (isRootMod)
+                        {
+                            ownerPerms |= (uint)PermissionMask.Modify;
+                            basePerms |= (uint)PermissionMask.Modify;
+                        }
+                    }
+
+                    ownerPerms &= nextPerms;
+                    basePerms &= nextPerms;
+                    basePerms &= ~(uint)PermissionMask.FoldedMask;
+                    basePerms |= ((basePerms >> 13) & 7) | (((basePerms & (uint)PermissionMask.Export) != 0) ? (uint)PermissionMask.FoldedExport : 0);
+                    item.BasePermissions = basePerms;
+                    item.CurrentPermissions = ownerPerms;
+                    item.Flags |= (uint)InventoryItemFlags.ObjectSlamPerm;
+                    item.Flags &= ~(uint)(InventoryItemFlags.ObjectOverwriteBase | InventoryItemFlags.ObjectOverwriteOwner | InventoryItemFlags.ObjectOverwriteGroup | InventoryItemFlags.ObjectOverwriteEveryone | InventoryItemFlags.ObjectOverwriteNextOwner);
+                    item.NextPermissions = item.NextPermissions;
+                    item.EveryOnePermissions = item.EveryOnePermissions & nextPerms;
+                }
+                else
+                {
+                    //??
+                    item.EveryOnePermissions &= item.NextPermissions;
+                }
+
+                item.GroupPermissions = 0; // we killed the group
+                item.Owner = agentID;
+
+                if (!m_Scene.InventoryService.AddItem(item))
+                    throw new Exception("Failed create the notecard item" + notecardID.ToString());
+
+                m_log.InfoFormat("[CAPS]: CopyInventoryFromNotecard, ItemID:{0} FolderID:{1}", item.ID, item.Folder);
+                if (client != null)
+                    client.SendBulkUpdateInventory(item);
+                return "";
             }
             catch (Exception e)
             {
-                m_log.ErrorFormat("[CAPS]: CopyInventoryFromNotecard : {0}", e.ToString());
+                m_log.ErrorFormat("[CAPS]: CopyInventoryFromNotecard : {0}", e.Message);
                 copyItem = null;
             }
 
             if(copyItem == null)
+            {
+                if (client != null)
+                    client.SendAlertMessage("Failed to retrieve item");
                 return CopyInventoryFromNotecardError(httpResponse);
+            }
 
             return "";
         }
