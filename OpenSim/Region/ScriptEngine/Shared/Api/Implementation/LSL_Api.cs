@@ -4917,9 +4917,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 GridInstantMessage msg = new GridInstantMessage(World,
                         m_host.OwnerID, m_host.Name, destId,
                         (byte)InstantMessageDialog.TaskInventoryOffered,
-                        false, item.Name+". "+m_host.Name+" is located at "+
-                        World.RegionInfo.RegionName+" "+
-                        m_host.AbsolutePosition.ToString(),
+                        m_host.OwnerID == m_host.GroupID, "'"+item.Name+"'. ("+m_host.Name+" is located at "+
+                        World.RegionInfo.RegionName+" "+ m_host.AbsolutePosition.ToString() + ")",
                         agentItem.ID, true, m_host.AbsolutePosition,
                         bucket, true);
 
@@ -7870,7 +7869,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 GridInstantMessage msg = new GridInstantMessage(World,
                         m_host.OwnerID, m_host.Name, destID,
                         (byte)InstantMessageDialog.TaskInventoryOffered,
-                        false, string.Format("'{0}'", category) + ". " + m_host.Name + " is located at " + World.RegionInfo.RegionName + " " + pos.ToString(),
+                        m_host.OwnerID == m_host.GroupID, string.Format("'{0}'", category),
+// We won't go so far as to add a SLURL, but this is the format used by LL as of 2012-10-06
+// false, string.Format("'{0}'  ( http://slurl.com/secondlife/{1}/{2}/{3}/{4} )", category, World.Name, (int)pos.X, (int)pos.Y, (int)pos.Z),
                         folderID, false, pos,
                         bucket, false);
 
