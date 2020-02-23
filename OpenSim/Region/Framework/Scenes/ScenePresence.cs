@@ -1503,10 +1503,6 @@ namespace OpenSim.Region.Framework.Scenes
             //m_log.DebugFormat("[MakeRootAgent] position and physical: {0}ms", Util.EnvironmentTickCountSubtract(ts));
             m_scene.SwapRootAgentCount(false);
 
-            bool isHGTP = (m_teleportFlags & TeleportFlags.ViaHGLogin) != 0;
-            if (isHGTP)
-                RestartAttachmentScripts();
-
             // If we don't reset the movement flag here, an avatar that crosses to a neighbouring sim and returns will
             // stall on the border crossing since the existing child agent will still have the last movement
             // recorded, which stops the input from being processed.
