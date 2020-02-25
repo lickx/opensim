@@ -2356,6 +2356,7 @@ namespace OpenSim.Region.Framework.Scenes
                         foreach (SceneObjectGroup sog in m_attachments)
                         {
                             sog.RootPart.ParentGroup.CreateScriptInstances(0, false, m_scene.DefaultScriptEngine, GetStateSource());
+                            sog.aggregateScriptEvents();
                             sog.ResumeScripts();
                         }
 
