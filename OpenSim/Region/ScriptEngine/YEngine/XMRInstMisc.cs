@@ -61,11 +61,13 @@ namespace OpenSim.Region.ScriptEngine.Yengine
     public partial class XMRInstance
     {
 
+        private bool m_disposed;
         // In case Dispose() doesn't get called, we want to be sure to clean
         // up.  This makes sure we decrement m_CompiledScriptRefCount.
         ~XMRInstance()
         {
-            Dispose();
+            if(!m_disposed)
+                Dispose();
         }
 
         /**
@@ -82,7 +84,6 @@ namespace OpenSim.Region.ScriptEngine.Yengine
             {
                 if(m_Part != null)
                 {
-                    m_Part.RemoveScriptEvents(m_ItemID);
                     AsyncCommandManager.RemoveScript(m_Engine, m_LocalID, m_ItemID);
                     m_Part = null;
                 }
@@ -91,6 +92,7 @@ namespace OpenSim.Region.ScriptEngine.Yengine
              // Let script methods get garbage collected if no one else is using
              // them.
             DecObjCodeRefCount();
+            m_disposed = true;
         }
 
         private void DecObjCodeRefCount()
