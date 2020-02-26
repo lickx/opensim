@@ -2958,6 +2958,15 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
                 // AddSceneObject already does this and doing it again messes
                 //if (so.RootPart.KeyframeMotion != null)
                 //    so.RootPart.KeyframeMotion.UpdateSceneObject(so);
+            } else {
+                ScenePresence sp = Scene.GetScenePresence(so.OwnerID);
+                if (sp != null && !sp.IsChildAgent && !sp.IsDeleted)
+                {
+                    so.RootPart.ParentGroup.CreateScriptInstances(
+                        0, false, Scene.DefaultScriptEngine, GetStateSource(so));
+
+                    so.ResumeScripts();
+                }
             }
 
             return true;
