@@ -2962,14 +2962,15 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             {
                 ScenePresence sp = Scene.GetScenePresence(so.OwnerID);
 
+                // Starting scripts will be handled in CompleteMovement if true
                 if (sp.IsInLocalTransit)
                     return true;
 
                 if (sp != null && !sp.IsChildAgent && !sp.IsDeleted)
                 {
+                    so.ScheduleGroupForFullUpdate();
                     so.RootPart.ParentGroup.CreateScriptInstances(
                         0, false, Scene.DefaultScriptEngine, GetStateSource(so));
-                    so.aggregateScriptEvents();
                     so.ResumeScripts();
                 }
             }
