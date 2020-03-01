@@ -115,6 +115,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         protected float m_ScriptDistanceFactor = 1.0f;
         protected float m_MinTimerInterval = 0.5f;
         protected float m_recoilScaleFactor = 0.0f;
+        protected bool m_AllowGodFunctions;
 
         protected double m_timer = Util.GetTimeStampMS();
         protected bool m_waitingForScriptAnswer = false;
@@ -340,7 +341,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 // Rezzing an object with a velocity can create recoil. This feature seems to have been
                 //    removed from recent versions of SL. The code computes recoil (vel*mass) and scales
                 //    it by this factor. May be zero to turn off recoil all together.
-                m_recoilScaleFactor = m_ScriptEngine.Config.GetFloat("RecoilScaleFactor", m_recoilScaleFactor);
+                m_recoilScaleFactor = seConfig.GetFloat("RecoilScaleFactor", m_recoilScaleFactor);
+                m_AllowGodFunctions = seConfig.GetBoolean("AllowGodFunctions", false);
             }
 
             if (m_notecardLineReadCharsMax > 65535)
@@ -917,51 +919,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return eul;
         }
 
-        /* From wiki:
-        The Euler angle vector (in radians) is converted to a rotation by doing the rotations around the 3 axes
-        in Z, Y, X order. So llEuler2Rot(<1.0, 2.0, 3.0> * DEG_TO_RAD) generates a rotation by taking the zero rotation,
-        a vector pointing along the X axis, first rotating it 3 degrees around the global Z axis, then rotating the resulting
-        vector 2 degrees around the global Y axis, and finally rotating that 1 degree around the global X axis.
-        */
-
-        /* How we arrived at this llEuler2Rot
-         *
-         * Experiment in SL to determine conventions:
-         *   llEuler2Rot(<PI,0,0>)=<1,0,0,0>
-         *   llEuler2Rot(<0,PI,0>)=<0,1,0,0>
-         *   llEuler2Rot(<0,0,PI>)=<0,0,1,0>
-         *
-         * Important facts about Quaternions
-         *  - multiplication is non-commutative (a*b != b*a)
-         *  - http://en.wikipedia.org/wiki/Quaternion#Basis_multiplication
-         *
-         * Above SL experiment gives (c1,c2,c3,s1,s2,s3 as defined in our llEuler2Rot):
-         *   Qx = c1+i*s1
-         *   Qy = c2+j*s2;
-         *   Qz = c3+k*s3;
-         *
-         * Rotations applied in order (from above) Z, Y, X
-         * Q = (Qz * Qy) * Qx
-         * ((c1+i*s1)*(c2+j*s2))*(c3+k*s3)
-         * (c1*c2+i*s1*c2+j*c1*s2+ij*s1*s2)*(c3+k*s3)
-         * (c1*c2+i*s1*c2+j*c1*s2+k*s1*s2)*(c3+k*s3)
-         * c1*c2*c3+i*s1*c2*c3+j*c1*s2*c3+k*s1*s2*c3+k*c1*c2*s3+ik*s1*c2*s3+jk*c1*s2*s3+kk*s1*s2*s3
-         * c1*c2*c3+i*s1*c2*c3+j*c1*s2*c3+k*s1*s2*c3+k*c1*c2*s3 -j*s1*c2*s3 +i*c1*s2*s3   -s1*s2*s3
-         * regroup: x=i*(s1*c2*c3+c1*s2*s3)
-         *          y=j*(c1*s2*c3-s1*c2*s3)
-         *          z=k*(s1*s2*c3+c1*c2*s3)
-         *          s=   c1*c2*c3-s1*s2*s3
-         *
-         * This implementation agrees with the functions found here:
-         * http://lslwiki.net/lslwiki/wakka.php?wakka=LibraryRotationFunctions
-         * And with the results in SL.
-         *
-         * It's also possible to calculate llEuler2Rot by direct multiplication of
-         * the Qz, Qy, and Qx vectors (as above - and done in the "accurate" function
-         * from the wiki).
-         * Apparently in some cases this is better from a numerical precision perspective?
-         */
-
         public LSL_Rotation llEuler2Rot(LSL_Vector v)
         {
             m_host.AddScriptLPS(1);
@@ -1122,48 +1079,26 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             //A and B should both be normalized
             m_host.AddScriptLPS(1);
-            /*  This method is more accurate than the SL one, and thus causes problems
-                for scripts that deal with the SL inaccuracy around 180-degrees -.- .._.
-
-            double dotProduct = LSL_Vector.Dot(a, b);
-            LSL_Vector crossProduct = LSL_Vector.Cross(a, b);
-            double magProduct = LSL_Vector.Mag(a) * LSL_Vector.Mag(b);
-            double angle = Math.Acos(dotProduct / magProduct);
-            LSL_Vector axis = LSL_Vector.Norm(crossProduct);
-            double s = Math.Sin(angle / 2);
-
-            double x = axis.x * s;
-            double y = axis.y * s;
-            double z = axis.z * s;
-            double w = Math.Cos(angle / 2);
-
-            if (Double.IsNaN(x) || Double.IsNaN(y) || Double.IsNaN(z) || Double.IsNaN(w))
-                return new LSL_Rotation(0.0f, 0.0f, 0.0f, 1.0f);
-
-            return new LSL_Rotation((float)x, (float)y, (float)z, (float)w);
-            */
 
             // This method mimics the 180 errors found in SL
             // See www.euclideanspace.com... angleBetween
-            LSL_Vector vec_a = a;
-            LSL_Vector vec_b = b;
 
             // Eliminate zero length
-            LSL_Float vec_a_mag = LSL_Vector.Mag(vec_a);
-            LSL_Float vec_b_mag = LSL_Vector.Mag(vec_b);
-            if (vec_a_mag < 0.00001 ||
-                vec_b_mag < 0.00001)
+            LSL_Float vec_a_mag = LSL_Vector.MagSquare(a);
+            LSL_Float vec_b_mag = LSL_Vector.MagSquare(b);
+            if (vec_a_mag < 1e-12 ||
+                vec_b_mag < 1e-12)
             {
                 return new LSL_Rotation(0.0f, 0.0f, 0.0f, 1.0f);
             }
 
             // Normalize
-            vec_a = llVecNorm(vec_a);
-            vec_b = llVecNorm(vec_b);
+            a = llVecNorm(a);
+            b = llVecNorm(b);
 
             // Calculate axis and rotation angle
-            LSL_Vector axis = vec_a % vec_b;
-            LSL_Float cos_theta  = vec_a * vec_b;
+            LSL_Vector axis = a % b;
+            LSL_Float cos_theta  = a * b;
 
             // Check if parallel
             if (cos_theta > 0.99999)
@@ -1174,8 +1109,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             // Check if anti-parallel
             else if (cos_theta < -0.99999)
             {
-                LSL_Vector orthog_axis = new LSL_Vector(1.0, 0.0, 0.0) - (vec_a.x / (vec_a * vec_a) * vec_a);
-                if (LSL_Vector.Mag(orthog_axis)  < 0.000001)  orthog_axis = new LSL_Vector(0.0, 0.0, 1.0);
+                LSL_Vector orthog_axis = new LSL_Vector(1.0, 0.0, 0.0) - (a.x / (a * a) * a);
+                if (LSL_Vector.MagSquare(orthog_axis)  < 1e-12)
+                    orthog_axis = new LSL_Vector(0.0, 0.0, 1.0);
                 return new LSL_Rotation((float)orthog_axis.x, (float)orthog_axis.y, (float)orthog_axis.z, 0.0);
             }
             else // other rotation
@@ -4907,8 +4843,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 byte[] bucket = new byte[1];
                 bucket[0] = (byte)item.Type;
-                //byte[] objBytes = agentItem.ID.GetBytes();
-                //Array.Copy(objBytes, 0, bucket, 1, 16);
 
                 GridInstantMessage msg = new GridInstantMessage(World,
                         m_host.OwnerID, m_host.Name, destId,
@@ -7828,32 +7762,74 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             if (!UUID.TryParse(destination, out destID))
                 return;
 
+            SceneObjectPart destsop = null;
+            ScenePresence sp = null;
+            bool isNotOwner = true;
+            if (!World.TryGetSceneObjectPart(destID, out destsop))
+            {
+                if (!World.TryGetScenePresence(destID, out sp))
+                {
+                    // we could check if it is a grid user and allow the transfer as in older code
+                    // but that increases security risk
+                    Error("llGiveInventoryList", "Unable to give list, destination not found");
+                    ScriptSleep(100);
+                    return;
+                }
+                isNotOwner = sp.UUID != m_host.OwnerID;
+            }
+
             List<UUID> itemList = new List<UUID>();
 
             foreach (Object item in inventory.Data)
             {
                 string rawItemString = item.ToString();
+                TaskInventoryItem taskItem = null;
 
-                UUID itemID;
-                if (UUID.TryParse(rawItemString, out itemID))
+                if (UUID.TryParse(rawItemString, out UUID itemID))
+                    taskItem = m_host.Inventory.GetInventoryItem(itemID);
+                else
+                    taskItem = m_host.Inventory.GetInventoryItem(rawItemString);
+
+                if(taskItem == null)
+                    continue;
+
+                if ((taskItem.CurrentPermissions & (uint)PermissionMask.Copy) == 0)
+                    continue;
+
+                if (destsop != null)
                 {
-                    itemList.Add(itemID);
+                    if(!World.Permissions.CanDoObjectInvToObjectInv(taskItem, m_host, destsop))
+                        continue;
                 }
                 else
                 {
-                    TaskInventoryItem taskItem = m_host.Inventory.GetInventoryItem(rawItemString);
-
-                    if (taskItem != null)
-                        itemList.Add(taskItem.ItemID);
+                    if(isNotOwner)
+                    {
+                        if ((taskItem.CurrentPermissions & (uint)PermissionMask.Transfer) == 0)
+                            continue;
+                    }
                 }
+
+                itemList.Add(taskItem.ItemID);
             }
 
             if (itemList.Count == 0)
+            {
+                Error("llGiveInventoryList", "Unable to give list, no items found");
+                ScriptSleep(100);
                 return;
+            }
 
             UUID folderID = m_ScriptEngine.World.MoveTaskInventoryItems(destID, category, m_host, itemList);
 
             if (folderID == UUID.Zero)
+            {
+                Error("llGiveInventoryList", "Unable to give list");
+                ScriptSleep(100);
+                return;
+            }
+
+            if (destsop != null)
                 return;
 
             if (m_TransferModule != null)
@@ -7873,6 +7849,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 m_TransferModule.SendInstantMessage(msg, delegate(bool success) {});
             }
+
+            ScriptSleep(destsop == null ?  3000 : 100);
         }
 
         public void llSetVehicleType(int type)
@@ -11198,11 +11176,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         /// http://wiki.secondlife.com/wiki/LlGetBoundingBox
         /// http://lslwiki.net/lslwiki/wakka.php?wakka=llGetBoundingBox
         /// Returns local bounding box of avatar without attachments
-        /// if target is non-seated avatar or prim/mesh in avatar attachment.
-        /// Returns local bounding box of object including seated avatars
+        ///   if target is non-seated avatar or prim/mesh in avatar attachment.
+        /// Returns local bounding box of object
         /// if target is seated avatar or prim/mesh in object.
-        /// Uses meshing of prims for high accuracy
-        /// or less accurate box models for speed.
+        /// Uses less accurate box models for speed.
         /// </summary>
         public LSL_List llGetBoundingBox(string obj)
         {
@@ -11228,8 +11205,6 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             ScenePresence presence = World.GetScenePresence(objID);
             if (presence != null)
             {
-                // As per LSL Wiki, there is no difference between sitting
-                // and standing avatar since server 1.36
                 LSL_Vector lower;
                 LSL_Vector upper;
 
@@ -12734,74 +12709,132 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return new LSL_List(outlist);
         }
 
+        private const uint fullperms = (uint)PermissionMask.All; // no export for now
+
+        private int PermissionMaskToLSLPerm(uint value)
+        {
+            value &= fullperms;
+            if (value == fullperms)
+                return ScriptBaseClass.PERM_ALL;
+            if( value == 0)
+                return 0;
+
+            int ret = 0;
+
+            if ((value & (uint)PermissionMask.Copy) != 0)
+                ret |= ScriptBaseClass.PERM_COPY;
+
+            if ((value & (uint)PermissionMask.Modify) != 0)
+                ret |= ScriptBaseClass.PERM_MODIFY;
+
+            if ((value & (uint)PermissionMask.Move) != 0)
+                ret |= ScriptBaseClass.PERM_MOVE;
+
+            if ((value & (uint)PermissionMask.Transfer) != 0)
+                ret |= ScriptBaseClass.PERM_TRANSFER;
+
+            return ret;
+        }
+
+        private uint LSLPermToPermissionMask(int lslperm, uint oldvalue)
+        {
+            lslperm &= ScriptBaseClass.PERM_ALL;
+            if (lslperm == ScriptBaseClass.PERM_ALL)
+                return oldvalue |= fullperms;
+
+            oldvalue &= ~fullperms;
+            if(lslperm != 0)
+            {
+                if ((lslperm & ScriptBaseClass.PERM_COPY) != 0)
+                    oldvalue |= (uint)PermissionMask.Copy;
+
+                if ((lslperm & ScriptBaseClass.PERM_MODIFY) != 0)
+                    oldvalue |= (uint)PermissionMask.Modify;
+
+                if ((lslperm & ScriptBaseClass.PERM_MOVE) != 0)
+                    oldvalue |= (uint)PermissionMask.Move;
+
+                if ((lslperm & ScriptBaseClass.PERM_TRANSFER) != 0)
+                    oldvalue |= (uint)PermissionMask.Transfer;
+            }
+
+            return oldvalue;
+        }
+
+        private int fixedCopyTransfer(int value)
+        {
+            if ((value & (ScriptBaseClass.PERM_COPY | ScriptBaseClass.PERM_TRANSFER)) == 0)
+                value |= ScriptBaseClass.PERM_TRANSFER;
+            return value;
+        }
+
         public LSL_Integer llGetObjectPermMask(int mask)
         {
             m_host.AddScriptLPS(1);
 
-            int permmask = 0;
-
-            if (mask == ScriptBaseClass.MASK_BASE)//0
+            switch(mask)
             {
-                permmask = (int)m_host.BaseMask;
-            }
+                case ScriptBaseClass.MASK_BASE:
+                    return PermissionMaskToLSLPerm(m_host.BaseMask);
 
-            else if (mask == ScriptBaseClass.MASK_OWNER)//1
-            {
-                permmask = (int)m_host.OwnerMask;
-            }
+                case ScriptBaseClass.MASK_OWNER:
+                    return PermissionMaskToLSLPerm(m_host.OwnerMask);
 
-            else if (mask == ScriptBaseClass.MASK_GROUP)//2
-            {
-                permmask = (int)m_host.GroupMask;
-            }
+                case ScriptBaseClass.MASK_GROUP:
+                    return PermissionMaskToLSLPerm(m_host.GroupMask);
 
-            else if (mask == ScriptBaseClass.MASK_EVERYONE)//3
-            {
-                permmask = (int)m_host.EveryoneMask;
-            }
+                case ScriptBaseClass.MASK_EVERYONE:
+                    return PermissionMaskToLSLPerm(m_host.EveryoneMask);
 
-            else if (mask == ScriptBaseClass.MASK_NEXT)//4
-            {
-                permmask = (int)m_host.NextOwnerMask;
+                case ScriptBaseClass.MASK_NEXT:
+                    return PermissionMaskToLSLPerm(m_host.NextOwnerMask);
             }
-
-            return permmask;
+            return -1;
         }
 
         public void llSetObjectPermMask(int mask, int value)
         {
             m_host.AddScriptLPS(1);
 
-            if (m_ScriptEngine.Config.GetBoolean("AllowGodFunctions", false))
+            if (!m_AllowGodFunctions || !World.Permissions.IsAdministrator(m_host.OwnerID))
+                return;
+
+            // not even admins have right to violate basic rules
+            if (mask != ScriptBaseClass.MASK_BASE)
             {
-                if (World.Permissions.IsAdministrator(m_host.OwnerID))
-                {
-                    if (mask == ScriptBaseClass.MASK_BASE)//0
-                    {
-                        m_host.BaseMask = (uint)value;
-                    }
-
-                    else if (mask == ScriptBaseClass.MASK_OWNER)//1
-                    {
-                        m_host.OwnerMask = (uint)value;
-                    }
-
-                    else if (mask == ScriptBaseClass.MASK_GROUP)//2
-                    {
-                        m_host.GroupMask = (uint)value;
-                    }
-
-                    else if (mask == ScriptBaseClass.MASK_EVERYONE)//3
-                    {
-                        m_host.EveryoneMask = (uint)value;
-                    }
-
-                    else if (mask == ScriptBaseClass.MASK_NEXT)//4
-                    {
-                        m_host.NextOwnerMask = (uint)value;
-                    }
-                }
+                mask &= PermissionMaskToLSLPerm(m_host.BaseMask);
+                if (mask != ScriptBaseClass.MASK_OWNER)
+                    mask &= PermissionMaskToLSLPerm(m_host.OwnerMask);
             }
+
+            switch (mask)
+            {
+                case ScriptBaseClass.MASK_BASE:
+                    value = fixedCopyTransfer(value);
+                    m_host.BaseMask = LSLPermToPermissionMask(value, m_host.BaseMask);
+                    break;
+
+                case ScriptBaseClass.MASK_OWNER:
+                    value = fixedCopyTransfer(value);
+                    m_host.OwnerMask = LSLPermToPermissionMask(value, m_host.OwnerMask);
+                    break;
+
+                case ScriptBaseClass.MASK_GROUP:
+                    m_host.GroupMask = LSLPermToPermissionMask(value, m_host.GroupMask);
+                    break;
+
+                case ScriptBaseClass.MASK_EVERYONE:
+                    m_host.EveryoneMask = LSLPermToPermissionMask(value, m_host.EveryoneMask);
+                    break;
+
+                case ScriptBaseClass.MASK_NEXT:
+                    value = fixedCopyTransfer(value);
+                    m_host.NextOwnerMask = LSLPermToPermissionMask(value, m_host.NextOwnerMask);
+                    break;
+                default:
+                    return;
+            }
+            m_host.ParentGroup.AggregatePerms();
         }
 
         public LSL_Integer llGetInventoryPermMask(string itemName, int mask)
@@ -12815,53 +12848,68 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             switch (mask)
             {
-                case 0:
-                    return (int)item.BasePermissions;
-                case 1:
-                    return (int)item.CurrentPermissions;
-                case 2:
-                    return (int)item.GroupPermissions;
-                case 3:
-                    return (int)item.EveryonePermissions;
-                case 4:
-                    return (int)item.NextPermissions;
+                case ScriptBaseClass.MASK_BASE:
+                    return PermissionMaskToLSLPerm(item.BasePermissions);
+                case ScriptBaseClass.MASK_OWNER:
+                    return PermissionMaskToLSLPerm(item.CurrentPermissions);
+                case ScriptBaseClass.MASK_GROUP:
+                    return PermissionMaskToLSLPerm(item.GroupPermissions);
+                case ScriptBaseClass.MASK_EVERYONE:
+                    return PermissionMaskToLSLPerm(item.EveryonePermissions);
+                case ScriptBaseClass.MASK_NEXT:
+                    return PermissionMaskToLSLPerm(item.NextPermissions);
             }
-
             return -1;
         }
 
         public void llSetInventoryPermMask(string itemName, int mask, int value)
         {
             m_host.AddScriptLPS(1);
+            if(!m_AllowGodFunctions || !World.Permissions.IsAdministrator(m_host.OwnerID))
+                return;
 
-            if (m_ScriptEngine.Config.GetBoolean("AllowGodFunctions", false))
+            TaskInventoryItem item = m_host.Inventory.GetInventoryItem(itemName);
+
+            if (item != null)
             {
-                if (World.Permissions.IsAdministrator(m_host.OwnerID))
+                if (mask != ScriptBaseClass.MASK_BASE)
                 {
-                    TaskInventoryItem item = m_host.Inventory.GetInventoryItem(itemName);
-
-                    if (item != null)
-                    {
-                        switch (mask)
-                        {
-                            case 0:
-                                item.BasePermissions = (uint)value;
-                                break;
-                            case 1:
-                                item.CurrentPermissions = (uint)value;
-                                break;
-                            case 2:
-                                item.GroupPermissions = (uint)value;
-                                break;
-                            case 3:
-                                item.EveryonePermissions = (uint)value;
-                                break;
-                            case 4:
-                                item.NextPermissions = (uint)value;
-                                break;
-                        }
-                    }
+                    mask &= PermissionMaskToLSLPerm(item.BasePermissions);
+                    if (mask != ScriptBaseClass.MASK_OWNER)
+                        mask &= PermissionMaskToLSLPerm(item.CurrentPermissions);
                 }
+
+                /*
+                if(item.Type == (int)(AssetType.Settings))
+                    value |= ScriptBaseClass.PERM_COPY;
+                */
+
+                switch (mask)
+                {
+                    case ScriptBaseClass.MASK_BASE:
+                        value = fixedCopyTransfer(value);
+                        item.BasePermissions = LSLPermToPermissionMask(value, item.BasePermissions);
+                        break;
+                    case ScriptBaseClass.MASK_OWNER:
+                        value = fixedCopyTransfer(value);
+                        item.CurrentPermissions = LSLPermToPermissionMask(value, item.CurrentPermissions);
+                        break;
+                    case ScriptBaseClass.MASK_GROUP:
+                        item.GroupPermissions = LSLPermToPermissionMask(value, item.GroupPermissions);
+                        break;
+                    case ScriptBaseClass.MASK_EVERYONE:
+                        item.EveryonePermissions = LSLPermToPermissionMask(value, item.EveryonePermissions);
+                        break;
+                    case ScriptBaseClass.MASK_NEXT:
+                        value = fixedCopyTransfer(value);
+                        item.NextPermissions = LSLPermToPermissionMask(value, item.NextPermissions);
+                        break;
+                    default:
+                        return;
+                }
+
+                m_host.ParentGroup.InvalidateDeepEffectivePerms();
+                m_host.ParentGroup.AggregatePerms();
             }
         }
 
@@ -13482,6 +13530,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public void llSetPayPrice(int price, LSL_List quick_pay_buttons)
         {
             m_host.AddScriptLPS(1);
+            if(m_host.LocalId != m_host.ParentGroup.RootPart.LocalId)
+                return;
 
             if (quick_pay_buttons.Data.Length < 4)
             {
