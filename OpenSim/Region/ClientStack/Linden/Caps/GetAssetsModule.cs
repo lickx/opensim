@@ -239,13 +239,13 @@ namespace OpenSim.Region.ClientStack.Linden
             {
                 m_scene = scene;
 
-                // x is request id, y is userid
-                HasEvents = (x, y) =>
+
+                HasEvents = (requestID, agentID) =>
                 {
                     lock (responses)
                     {
                         APollResponse response;
-                        if (responses.TryGetValue(x, out response))
+                        if (responses.TryGetValue(requestID, out response))
                         {
                             if (m_presence == null)
                                 m_presence = m_scene.GetScenePresence(pId);
@@ -260,37 +260,37 @@ namespace OpenSim.Region.ClientStack.Linden
                     }
                 };
 
-                Drop = (x, y) =>
+                Drop = (requestID, y) =>
                 {
                     lock (responses)
                     {
-                        responses.Remove(x);
+                        responses.Remove(requestID);
                         lock(dropedResponses)
-                            dropedResponses.Add(x);
+                            dropedResponses.Add(requestID);
                     }
                 };
 
-                GetEvents = (x, y) =>
+                GetEvents = (requestID, y) =>
                 {
                     lock (responses)
                     {
                         try
                         {
-                            return responses[x].response;
+                            return responses[requestID].response;
                         }
                         finally
                         {
-                            responses.Remove(x);
+                            responses.Remove(requestID);
                         }
                     }
                 };
                 // x is request id, y is request data hashtable
-                Request = (x, y) =>
+                Request = (requestID, request) =>
                 {
                     APollRequest reqinfo = new APollRequest();
                     reqinfo.thepoll = this;
-                    reqinfo.reqID = x;
-                    reqinfo.request = y;
+                    reqinfo.reqID = requestID;
+                    reqinfo.request = request;
 
                     m_queue.Add(reqinfo);
                 };
@@ -401,7 +401,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 // Register this as a poll service
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
 
-                args.Type = PollServiceEventArgs.EventType.Texture;
+                //args.Type = PollServiceEventArgs.EventType.Texture;
                 MainServer.Instance.AddPollServiceHTTPHandler(capUrl, args);
 
                 if (handler != null)
@@ -421,7 +421,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 string capUrl = "/CAPS/" + UUID.Random() + "/";
 
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
-                args.Type = PollServiceEventArgs.EventType.Mesh;
+                //args.Type = PollServiceEventArgs.EventType.Mesh;
                 MainServer.Instance.AddPollServiceHTTPHandler(capUrl, args);
 
                 if (handler != null)
@@ -439,7 +439,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 string capUrl = "/CAPS/" + UUID.Random() + "/";
 
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
-                args.Type = PollServiceEventArgs.EventType.Mesh2;
+                //args.Type = PollServiceEventArgs.EventType.Mesh2;
                 MainServer.Instance.AddPollServiceHTTPHandler(capUrl, args);
 
                 if (handler != null)
@@ -458,7 +458,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 string capUrl = "/CAPS/" + UUID.Random() + "/";
 
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
-                args.Type = PollServiceEventArgs.EventType.Asset;
+                //args.Type = PollServiceEventArgs.EventType.Asset;
                 MainServer.Instance.AddPollServiceHTTPHandler(capUrl, args);
 
                 if (handler != null)

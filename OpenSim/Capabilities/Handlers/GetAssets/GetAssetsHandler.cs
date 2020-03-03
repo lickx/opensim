@@ -68,7 +68,8 @@ namespace OpenSim.Capabilities.Handlers
             {"jpeg_id", AssetType.ImageJPEG},
             {"animatn_id", AssetType.Animation},
             {"gesture_id", AssetType.Gesture},
-            {"mesh_id", AssetType.Mesh}
+            {"mesh_id", AssetType.Mesh},
+            {"settings_id", AssetType.Settings}
         };
 
         private IAssetService m_assetService;

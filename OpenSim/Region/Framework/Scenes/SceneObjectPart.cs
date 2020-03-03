@@ -2105,7 +2105,12 @@ namespace OpenSim.Region.Framework.Scenes
                 return;
 
             if (PhysicsShapeType == (byte)PhysShapeType.none)
-                return;
+            {
+                if(ParentID == 0)
+                    m_physicsShapeType = DefaultPhysicsShapeType();
+                else
+                    return;
+            }
 
             bool isPhysical = (_ObjectFlags & (uint) PrimFlags.Physics) != 0;
             bool isPhantom = (_ObjectFlags & (uint)PrimFlags.Phantom) != 0;
