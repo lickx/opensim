@@ -1198,7 +1198,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
     //                "[SCRIPT INSTANCE]: Saving state for script {0} (id {1}) in part {2} (id {3}) in object {4} in {5}",
     //                ScriptTask.Name, ScriptTask.ItemID, Part.Name, Part.UUID, Part.ParentGroup.Name, Engine.World.Name);
 
-                string xml = ScriptSerializer.Serialize(this);
+                string xml = ScriptSerializer.Serialize(this, this.Running);
 
                 // Compare hash of the state we just just created with the state last written to disk
                 // If the state is different, update the disk file.
@@ -1314,7 +1314,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
             //
             PluginData = AsyncCommandManager.GetSerializationData(Engine, ItemID);
 
-            return ScriptSerializer.Serialize(this);
+            return ScriptSerializer.Serialize(this, run);
         }
 
         public UUID RegionID
