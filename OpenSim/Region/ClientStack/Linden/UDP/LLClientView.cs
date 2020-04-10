@@ -750,8 +750,19 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             {
                 if (pprocessor.Async)
                 {
-                    object obj = new AsyncPacketProcess(pprocessor.method, packet);
-                    m_asyncPacketProcess.QueueJob(packet.Type.ToString(), () => ProcessSpecificPacketAsync(obj));
+                    m_asyncPacketProcess.QueueJob(packet.Type.ToString(), () =>
+                    {
+                        try
+                        {
+                            pprocessor.method(packet);
+                        }
+                        catch (Exception e)
+                        {
+                            // Make sure that we see any exception caused by the asynchronous operation.
+                            m_log.Error(string.Format(
+                                    "[LLCLIENTVIEW]: Caught exception while processing {0} for {1}  ", packet, Name),e);
+                        }
+                    });
                 }
                 else
                 {
@@ -760,24 +771,6 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 return true;
             }
             return false;
-        }
-
-        public void ProcessSpecificPacketAsync(object state)
-        {
-            AsyncPacketProcess packetObject = (AsyncPacketProcess)state;
-
-            try
-            {
-                packetObject.Method(packetObject.Pack);
-            }
-            catch (Exception e)
-            {
-                // Make sure that we see any exception caused by the asynchronous operation.
-                m_log.Error(
-                    string.Format(
-                        "[LLCLIENTVIEW]: Caught exception while processing {0} for {1}  ", packetObject.Pack, Name),
-                    e);
-            }
         }
 
         #endregion Packet Handling
@@ -13481,24 +13474,13 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             /// <summary>
             /// Packet handling method.
             /// </summary>
-            public PacketMethod method { get; set; }
+            public PacketMethod method;
 
             /// <summary>
             /// Should this packet be handled asynchronously?
             /// </summary>
-            public bool Async { get; set; }
+            public bool Async;
 
-        }
-
-        public class AsyncPacketProcess
-        {
-            public readonly Packet Pack = null;
-            public readonly PacketMethod Method = null;
-            public AsyncPacketProcess(PacketMethod pMethod, Packet pPack)
-            {
-                Method = pMethod;
-                Pack = pPack;
-            }
         }
 
         public void SendAvatarInterestsReply(UUID avatarID, uint wantMask, string wantText, uint skillsMask, string skillsText, string languages)

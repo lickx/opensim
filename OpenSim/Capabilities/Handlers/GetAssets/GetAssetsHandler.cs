@@ -178,11 +178,21 @@ namespace OpenSim.Capabilities.Handlers
             responsedata["content_type"] = asset.Metadata.ContentType;
             responsedata["bin_response_data"] = asset.Data;
             responsedata["int_bytes"] = len;
-            //if (type == AssetType.Mesh || type == AssetType.Texture)
-            //{
-            //    responsedata["throttle"] = true;
-            //    responsedata["prio"] = len < 8196 ? 1 : 2;
-            //}
+            /*
+            if (type == AssetType.Mesh || type == AssetType.Texture)
+            {
+                if(len > 8196)
+                {
+                    responsedata["throttle"] = true;
+                    if(type == AssetType.Texture && ((asset.Flags & AssetFlags.AvatarBake)!= 0))
+                        responsedata["prio"] = 1;
+                    else
+                        responsedata["prio"] = 2;
+                }
+                else
+                    responsedata["prio"] = 1;
+            }
+            */
             return responsedata; // full asset
         }
     }
