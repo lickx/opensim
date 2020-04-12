@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Specialized;
 using System.IO;
+using System.Net;
 using OSHttpServer.Exceptions;
 
 namespace OSHttpServer
@@ -8,7 +9,7 @@ namespace OSHttpServer
     /// <summary>
     /// Contains server side HTTP request information.
     /// </summary>
-    public interface IHttpRequest : ICloneable
+    public interface IHttpRequest
     {
         /// <summary>
         /// Gets kind of types accepted by the client.
@@ -20,11 +21,6 @@ namespace OSHttpServer
         /// Gets or sets body stream.
         /// </summary>
         Stream Body { get; set; }
-
-        /// <summary>
-        /// Gets whether the body is complete.
-        /// </summary>
-        bool BodyIsComplete { get; }
 
         /// <summary>
         /// Gets or sets kind of connection used for the session.
@@ -84,27 +80,12 @@ namespace OSHttpServer
         /// <summary>
         /// Gets variables sent in the query string
         /// </summary>
-        HttpInput QueryString { get; }
+        NameValueCollection QueryString { get; }
 
         /// <summary>
         /// Gets or sets requested URI.
         /// </summary>
         Uri Uri { get; set; }
-
-        /// <summary>
-        /// Gets URI absolute path divided into parts.
-        /// </summary>
-        /// <example>
-        /// // URI is: http://gauffin.com/code/tiny/
-        /// Console.WriteLine(request.UriParts[0]); // result: code
-        /// Console.WriteLine(request.UriParts[1]); // result: tiny
-        /// </example>
-        /// <remarks>
-        /// If you're using controllers than the first part is controller name,
-        /// the second part is method name and the third part is Id property.
-        /// </remarks>
-        /// <seealso cref="Uri"/>
-        string[] UriParts { get; }
 
         /// <summary>
         /// Gets or sets path and query.
@@ -154,5 +135,7 @@ namespace OSHttpServer
         /// </summary>
         /// <param name="cookies">The cookies.</param>
         void SetCookies(RequestCookies cookies);
+
+        IPEndPoint RemoteIPEndPoint { get; }
     }
 }
