@@ -2355,7 +2355,6 @@ namespace OpenSim.Region.Framework.Scenes
                     {
                         foreach (SceneObjectGroup sog in m_attachments)
                         {
-                            sog.ScheduleGroupForFullUpdate();
                             sog.RootPart.ParentGroup.CreateScriptInstances(0, false, m_scene.DefaultScriptEngine, GetStateSource());
                             sog.ResumeScripts();
                         }
@@ -2434,7 +2433,7 @@ namespace OpenSim.Region.Framework.Scenes
                 m_crossingFlags = 0;
                 m_inTransit = false;
             }
- 
+
             m_scene.EventManager.OnRegionHeartbeatEnd += RegionHeartbeatEnd;
 
             m_log.DebugFormat("[CompleteMovement] end: {0}ms", Util.EnvironmentTickCountSubtract(ts));

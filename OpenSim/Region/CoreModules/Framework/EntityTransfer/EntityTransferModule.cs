@@ -38,6 +38,7 @@ using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.PhysicsModules.SharedBase;
 using OpenSim.Services.Interfaces;
+using TeleportFlags = OpenSim.Framework.Constants.TeleportFlags;
 
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
@@ -2962,15 +2963,14 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             {
                 ScenePresence sp = Scene.GetScenePresence(so.OwnerID);
 
-                // Starting scripts will be handled in CompleteMovement if true
-                if (sp.IsInLocalTransit)
-                    return true;
+                bool isHGTP = (sp.TeleportFlags & TeleportFlags.ViaHGLogin) != 0;
 
-                if (sp != null && !sp.IsChildAgent && !sp.IsDeleted)
+                if (isHGTP && !sp.IsChildAgent)
                 {
-                    so.ScheduleGroupForFullUpdate();
+                    //m_log.Debug("[ENTITY TRANSFER MODULE]: HGTP, starting scripts");
                     so.RootPart.ParentGroup.CreateScriptInstances(
                         0, false, Scene.DefaultScriptEngine, GetStateSource(so));
+                    so.aggregateScriptEvents();
                     so.ResumeScripts();
                 }
             }
