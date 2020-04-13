@@ -137,11 +137,27 @@ namespace OpenSim.Tests.Common
             }
         }
 
-        public Dictionary<string,string> Query
+        public Hashtable Query
         {
             get
             {
-                throw new NotImplementedException ();
+                throw new NotImplementedException();
+            }
+        }
+
+        public Dictionary<string, string> QueryAsDictionary
+        {
+            get
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public HashSet<string> QueryFlags
+        {
+            get
+            {
+                throw new NotImplementedException();
             }
         }
 
@@ -157,7 +173,15 @@ namespace OpenSim.Tests.Common
         {
             get
             {
-                throw new NotImplementedException ();
+                throw new NotImplementedException();
+            }
+        }
+
+        public IPEndPoint LocalIPEndPoint
+        {
+            get
+            {
+                throw new NotImplementedException();
             }
         }
 
