@@ -149,6 +149,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
             set
             {
+                bool reEnqueueScript = false;
                 // Need to do this inside a lock in order to avoid races with EventProcessor()
                 lock (m_Script)
                 {
@@ -157,12 +158,16 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
 
                     if (wasSuspended && !m_Suspended)
                     {
-                        lock (EventQueue)
-                        {
-                            // Need to place ourselves back in a work item if there are events to process
-                            if (EventQueue.Count > 0 && Running && !ShuttingDown)
-                                m_CurrentWorkItem = Engine.QueueEventHandler(this);
-                        }
+                        reEnqueueScript = true;
+                    }
+                }
+                if (reEnqueueScript)
+                {
+                    lock (EventQueue)
+                    {
+                        // Need to place ourselves back in a work item if there are events to process
+                        if (EventQueue.Count > 0 && Running && !ShuttingDown)
+                            m_CurrentWorkItem = Engine.QueueEventHandler(this);
                     }
                 }
             }
@@ -1198,7 +1203,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
     //                "[SCRIPT INSTANCE]: Saving state for script {0} (id {1}) in part {2} (id {3}) in object {4} in {5}",
     //                ScriptTask.Name, ScriptTask.ItemID, Part.Name, Part.UUID, Part.ParentGroup.Name, Engine.World.Name);
 
-                string xml = ScriptSerializer.Serialize(this);
+                string xml = ScriptSerializer.Serialize(this, this.Running);
 
                 // Compare hash of the state we just just created with the state last written to disk
                 // If the state is different, update the disk file.
@@ -1314,7 +1319,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Instance
             //
             PluginData = AsyncCommandManager.GetSerializationData(Engine, ItemID);
 
-            return ScriptSerializer.Serialize(this);
+            return ScriptSerializer.Serialize(this, run);
         }
 
         public UUID RegionID
