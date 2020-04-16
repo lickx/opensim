@@ -344,7 +344,7 @@ namespace OSHttpServer
                 case "host":
                     try
                     {
-                        m_uri = new Uri(Secure ? "https://" : "http://" + value + m_uriPath);
+                        m_uri = new Uri((Secure ? "https://" : "http://") + value + m_uriPath);
                         m_uriPath = m_uri.AbsolutePath;
                     }
                     catch (UriFormatException err)
@@ -402,6 +402,7 @@ namespace OSHttpServer
                         throw new BadRequestException("Unknown 'Connection' header type.");
                     break;
 
+                /*
                 case "expect":
                     if (value.Contains("100-continue"))
                     {
@@ -409,7 +410,10 @@ namespace OSHttpServer
                     }
                     m_headers.Add(name, value);
                     break;
+                */
+                case "user-agent":
 
+                    break;
                 default:
                     m_headers.Add(name, value);
                     break;
