@@ -26,39 +26,64 @@
  */
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.IO;
-using System.Net;
-using System.Text;
-using System.Web;
 
 namespace OpenSim.Framework.Servers.HttpServer
 {
-    public interface IOSHttpRequest
+    /// <summary>
+    /// simple Base streamed request handler
+    /// for well defined simple uri paths, any http method
+    /// </summary>
+    public abstract class SimpleBaseRequestHandler
     {
-        string[] AcceptTypes { get; }
-        Encoding ContentEncoding { get; }
-        long ContentLength { get; }
-        long ContentLength64 { get; }
-        string ContentType { get; }
-        HttpCookieCollection Cookies { get; }
-        bool HasEntityBody { get; }
-        NameValueCollection Headers { get; }
-        string HttpMethod { get; }
-        Stream InputStream { get; }
-        bool IsSecured { get; }
-        bool KeepAlive { get; }
-        NameValueCollection QueryString { get; }
-        Hashtable Query { get; }
-        HashSet<string> QueryFlags { get; }
-        Dictionary<string, string> QueryAsDictionary { get; } //faster than Query
-        string RawUrl { get; }
-        IPEndPoint RemoteIPEndPoint { get; }
-        IPEndPoint LocalIPEndPoint { get; }
-        Uri Url { get; }
-        string UriPath { get; }
-        string UserAgent { get; }
+        public int RequestsReceived { get; protected set; }
+
+        public int RequestsHandled { get; protected set; }
+
+        private readonly string m_path;
+
+        public string Name { get; private set; }
+
+        public string Description { get; private set; }
+
+        protected SimpleBaseRequestHandler(string path) : this(path, null, null) { }
+
+        protected SimpleBaseRequestHandler(string path, string name, string description)
+        {
+            Name = name;
+            Description = description;
+            m_path = path;
+        }
+
+        public string Path
+        {
+            get { return m_path; }
+        }
+
+        public string GetParam(string path)
+        {
+            if (CheckParam(path))
+            {
+                return path.Substring(m_path.Length);
+            }
+
+            return string.Empty;
+        }
+
+        protected bool CheckParam(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+
+            return path.StartsWith(Path);
+        }
+
+        public string[] SplitParams(string path)
+        {
+            string param = GetParam(path);
+
+            return param.Split(new char[] { '/', '?', '&' }, StringSplitOptions.RemoveEmptyEntries);
+        }
     }
 }

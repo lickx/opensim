@@ -78,7 +78,7 @@ namespace OpenSim.Framework.Servers.HttpServer
         /// </returns>
         bool AddHTTPHandler(string methodName, GenericHTTPMethod handler);
 
-        bool AddPollServiceHTTPHandler(string ulr, PollServiceEventArgs args);
+        bool AddPollServiceHTTPHandler(string uripath, PollServiceEventArgs args);
         bool AddPollServiceHTTPHandler(PollServiceEventArgs args);
 
         void RemovePollServiceHTTPHandler(string url, string path);
@@ -97,6 +97,7 @@ namespace OpenSim.Framework.Servers.HttpServer
         /// </summary>
         /// <param name="handler"></param>
         void AddStreamHandler(IRequestHandler handler);
+        void AddSimpleStreamHandler(ISimpleStreamHandler handler);
 
         bool AddXmlRPCHandler(string method, XmlRpcMethod handler);
         bool AddXmlRPCHandler(string method, XmlRpcMethod handler, bool keepAlive);
@@ -141,6 +142,7 @@ namespace OpenSim.Framework.Servers.HttpServer
         bool RemoveLLSDHandler(string path, LLSDMethod handler);
 
         void RemoveStreamHandler(string httpMethod, string path);
+        void RemoveSimpleStreamHandler(string path);
 
         void RemoveXmlRPCHandler(string method);
 
