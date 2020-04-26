@@ -216,11 +216,12 @@ namespace OpenSim
 
             base.StartupSpecific();
 
-            MainServer.Instance.AddStreamHandler(new OpenSim.SimStatusHandler());
-            MainServer.Instance.AddStreamHandler(new OpenSim.XSimStatusHandler(this));
+            MainServer.Instance.AddSimpleStreamHandler(new SimStatusHandler());
+            MainServer.Instance.AddSimpleStreamHandler(new XSimStatusHandler(this));
             if (userStatsURI != String.Empty)
-                MainServer.Instance.AddStreamHandler(new OpenSim.UXSimStatusHandler(this));
-            MainServer.Instance.AddStreamHandler(new OpenSim.SimRobotsHandler());
+                MainServer.Instance.AddSimpleStreamHandler(new UXSimStatusHandler(this));
+            MainServer.Instance.AddSimpleStreamHandler(new SimRobotsHandler());
+            MainServer.Instance.AddSimpleStreamHandler(new IndexPHPHandler(MainServer.Instance));
 
             if (managedStatsURI != String.Empty)
             {

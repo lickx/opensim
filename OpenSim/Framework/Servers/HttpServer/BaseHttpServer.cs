@@ -105,6 +105,7 @@ namespace OpenSim.Framework.Servers.HttpServer
         protected ConcurrentDictionary<string, PollServiceEventArgs> m_pollHandlers =
             new ConcurrentDictionary<string, PollServiceEventArgs>();
 
+        protected ConcurrentDictionary<string, SimpleStreamMethod> m_indexPHPmethods = new ConcurrentDictionary<string, SimpleStreamMethod>();
         protected Dictionary<string, WebSocketRequestDelegate> m_WebSocketHandlers =
             new Dictionary<string, WebSocketRequestDelegate>();
 
@@ -535,6 +536,24 @@ namespace OpenSim.Framework.Servers.HttpServer
             return true;
         }
 
+        public void AddIndexPHPMethodHandler(string key, SimpleStreamMethod sh)
+        {
+            m_indexPHPmethods.TryAdd(key, sh);
+        }
+
+        public void RemoveIndexPHPMethodHandler(string key)
+        {
+            m_indexPHPmethods.TryRemove(key, out SimpleStreamMethod sh);
+        }
+
+        public SimpleStreamMethod TryGetIndexPHPMethodHandler(string key)
+        {
+            if(m_indexPHPmethods.TryGetValue(key, out SimpleStreamMethod sh))
+                return sh;
+            return null;
+        }
+
+
         public void OnRequest(object source, RequestEventArgs args)
         {
             RequestNumber++;
@@ -542,7 +561,6 @@ namespace OpenSim.Framework.Servers.HttpServer
             {
                 IHttpClientContext context = (IHttpClientContext)source;
                 IHttpRequest request = args.Request;
-
                 if (TryGetPollServiceHTTPHandler(request.UriPath, out PollServiceEventArgs psEvArgs))
                 {
                     psEvArgs.RequestsReceived++;
@@ -587,23 +605,6 @@ namespace OpenSim.Framework.Servers.HttpServer
         /// <param name="response"></param>
         public virtual void HandleRequest(OSHttpRequest request, OSHttpResponse response)
         {
-            if (request.HttpMethod == String.Empty) // Can't handle empty requests, not wasting a thread
-            {
-                try
-                {
-                    if(request.InputStream != null && request.InputStream.CanRead) 
-                        request.InputStream.Close();
-                    byte[] buffer500 = SendHTML500(response);
-                    response.OutputStream.Write(buffer500, 0, buffer500.Length);
-                    response.Send();
-                }
-                catch
-                {
-                }
-
-                return;
-            }
-
             string requestMethod = request.HttpMethod;
             string uriString = request.RawUrl;
 
@@ -640,7 +641,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                 //                    }
                 //                }
                 string path = request.UriPath;
-                if (!string.IsNullOrWhiteSpace(path) && path!="/" && TryGetSimpleStreamHandler(path, out ISimpleStreamHandler hdr))
+                if (path!="/" && TryGetSimpleStreamHandler(path, out ISimpleStreamHandler hdr))
                 {
                     hdr.Handle(request, response);
                     if (request.InputStream != null && request.InputStream.CanRead)
@@ -850,8 +851,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                 m_log.Error("[BASE HTTP SERVER]: HandleRequest() threw exception ", e);
                 try
                 {
-                    byte[] buffer500 = SendHTML500(response);
-                    response.OutputStream.Write(buffer500, 0, buffer500.Length);
+                    response.StatusCode =(int)HttpStatusCode.InternalServerError;
                     response.Send();
                 }
                 catch
@@ -981,14 +981,16 @@ namespace OpenSim.Framework.Servers.HttpServer
 
         private bool TryGetStreamHandler(string handlerKey, out IRequestHandler streamHandler)
         {
+            if(m_streamHandlers.TryGetValue(handlerKey, out streamHandler))
+                return true;
+
             string bestMatch = null;
 
             lock (m_streamHandlers)
             {
                 foreach (string pattern in m_streamHandlers.Keys)
                 {
-                    if ((handlerKey == pattern)
-                        || (handlerKey.StartsWith(pattern) && (HANDLER_SEPARATORS.IndexOf(handlerKey[pattern.Length]) >= 0)))
+                    if (handlerKey.StartsWith(pattern) && (HANDLER_SEPARATORS.IndexOf(handlerKey[pattern.Length]) >= 0))
                     {
                         if (String.IsNullOrEmpty(bestMatch) || pattern.Length > bestMatch.Length)
                         {
@@ -1735,11 +1737,6 @@ namespace OpenSim.Framework.Servers.HttpServer
                 headervals[headername] = request.Headers[headername];
             }
 
-            if (headervals.Contains("Host"))
-            {
-                host = (string)headervals["Host"];
-            }
-
             keysvals.Add("headers", headervals);
             keysvals.Add("querystringkeys", querystringkeys);
             keysvals.Add("requestvars", requestVars);
@@ -1762,7 +1759,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                 else
                 {
 //                    m_log.Warn("[BASE HTTP SERVER]: Handler Not Found");
-                    buffer = SendHTML404(response, host);
+                    buffer = SendHTML404(response);
                 }
             }
             else
@@ -1779,7 +1776,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                 else
                 {
 //                    m_log.Warn("[BASE HTTP SERVER]: Handler Not Found2");
-                    buffer = SendHTML404(response, host);
+                    buffer = SendHTML404(response);
                 }
             }
 
@@ -1963,28 +1960,12 @@ namespace OpenSim.Framework.Servers.HttpServer
             return buffer;
         }
 
-        public byte[] SendHTML404(OSHttpResponse response, string host)
+        public byte[] SendHTML404(OSHttpResponse response)
         {
-            // I know this statuscode is dumb, but the client doesn't respond to 404s and 500s
             response.StatusCode = 404;
-            response.AddHeader("Content-type", "text/html");
+            response.ContentType = "text/html";
 
-            string responseString = GetHTTP404(host);
-            byte[] buffer = Encoding.UTF8.GetBytes(responseString);
-
-            response.ContentLength64 = buffer.Length;
-            response.ContentEncoding = Encoding.UTF8;
-
-            return buffer;
-        }
-
-        public byte[] SendHTML500(OSHttpResponse response)
-        {
-            // I know this statuscode is dumb, but the client doesn't respond to 404s and 500s
-            response.StatusCode = (int)HttpStatusCode.OK;
-            response.AddHeader("Content-type", "text/html");
-
-            string responseString = GetHTTP500();
+            string responseString = GetHTTP404();
             byte[] buffer = Encoding.UTF8.GetBytes(responseString);
 
             response.ContentLength64 = buffer.Length;
@@ -2218,11 +2199,11 @@ namespace OpenSim.Framework.Servers.HttpServer
             return false;
         }
 
-        public string GetHTTP404(string host)
+        public string GetHTTP404()
         {
             string file = Path.Combine(".", "http_404.html");
             if (!File.Exists(file))
-                return getDefaultHTTP404(host);
+                return getDefaultHTTP404();
 
             StreamReader sr = File.OpenText(file);
             string result = sr.ReadToEnd();
@@ -2230,26 +2211,10 @@ namespace OpenSim.Framework.Servers.HttpServer
             return result;
         }
 
-        public string GetHTTP500()
-        {
-            string file = Path.Combine(".", "http_500.html");
-            if (!File.Exists(file))
-                return getDefaultHTTP500();
-            string result;
-            using(StreamReader sr = File.OpenText(file))
-                result = sr.ReadToEnd();
-            return result;
-        }
-
         // Fallback HTTP responses in case the HTTP error response files don't exist
-        private static string getDefaultHTTP404(string host)
+        private static string getDefaultHTTP404()
         {
-            return "<HTML><HEAD><TITLE>404 Page not found</TITLE><BODY><BR /><H1>Ooops!</H1><P>The page you requested has been obsconded with by knomes. Find hippos quick!</P><P>If you are trying to log-in, your link parameters should have: &quot;-loginpage http://" + host + "/?method=login -loginuri http://" + host + "/&quot; in your link </P></BODY></HTML>";
-        }
-
-        private static string getDefaultHTTP500()
-        {
-            return "<HTML><HEAD><TITLE>500 Internal Server Error</TITLE><BODY><BR /><H1>Ooops!</H1><P>The server you requested is overun by knomes! Find hippos quick!</P></BODY></HTML>";
+            return "<HTML><HEAD><TITLE>404 Page not found</TITLE><BODY><BR /><H1>Ooops!</H1><P>The page you requested has been obsconded with by knomes. Find hippos quick!</P></BODY></HTML>";
         }
     }
 

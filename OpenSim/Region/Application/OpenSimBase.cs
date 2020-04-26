@@ -829,19 +829,15 @@ namespace OpenSim
         /// <remarks>
         /// Currently this is always OK if the simulator is still listening for connections on its HTTP service
         /// </remarks>
-        public class SimStatusHandler : BaseStreamHandler
+        public class SimStatusHandler : SimpleStreamHandler
         {
-            public SimStatusHandler() : base("GET", "/simstatus", "SimStatus", "Simulator Status") {}
+            public SimStatusHandler() : base("/simstatus", "SimStatus", "Simulator Status") {}
 
-            protected override byte[] ProcessRequest(string path, Stream request,
-                                 IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
+            protected override void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
             {
-                return Util.UTF8.GetBytes("OK");
-            }
-
-            public override string ContentType
-            {
-                get { return "text/plain"; }
+                httpResponse.KeepAlive = false;
+                httpResponse.RawBuffer = Util.UTF8.GetBytes("OK");
+                httpResponse.StatusCode = (int)HttpStatusCode.OK;
             }
         }
 
@@ -849,25 +845,78 @@ namespace OpenSim
         /// Handler to supply the current extended status of this sim
         /// Sends the statistical data in a json serialization
         /// </summary>
-        public class XSimStatusHandler : BaseStreamHandler
+        public class XSimStatusHandler : SimpleStreamHandler
         {
             OpenSimBase m_opensim;
 
             public XSimStatusHandler(OpenSimBase sim)
-                : base("GET", "/" + Util.SHA1Hash(sim.osSecret), "XSimStatus", "Simulator XStatus")
+                : base("/" + Util.SHA1Hash(sim.osSecret), "XSimStatus", "Simulator XStatus")
             {
                 m_opensim = sim;
             }
 
-            protected override byte[] ProcessRequest(string path, Stream request,
-                                 IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
+            protected override void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
             {
-                return Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
+                httpResponse.KeepAlive = false;
+                try
+                {
+                    httpResponse.RawBuffer = Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
+                    httpResponse.StatusCode = (int)HttpStatusCode.OK;
+                }
+                catch
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.InternalServerError;
+                }
+            }
+        }
+
+        public class IndexPHPHandler : SimpleStreamHandler
+        {
+            BaseHttpServer m_server;
+
+            public IndexPHPHandler(BaseHttpServer server)
+                : base("/index.php")
+            {
+                m_server = server;
             }
 
-            public override string ContentType
+            protected override void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
             {
-                get { return "text/plain"; }
+                httpResponse.KeepAlive = false;
+                if(m_server == null || !m_server.HTTPDRunning)
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.NotFound;
+                    return;
+                }
+
+                if (!httpRequest.QueryAsDictionary.TryGetValue("method", out string methods) || string.IsNullOrWhiteSpace(methods))
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.NotFound;
+                    return;
+                }
+
+                string[] splited = methods.Split(new char[]{','});
+                string method = splited[0];
+                if (string.IsNullOrWhiteSpace(method))
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.NotFound;
+                    return;
+                }
+
+                SimpleStreamMethod sh = m_server.TryGetIndexPHPMethodHandler(method);
+                if (sh == null)
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.NotFound;
+                    return;
+                }
+                try
+                {
+                    sh?.Invoke(httpRequest, httpResponse);
+                }
+                catch
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.InternalServerError;
+                }
             }
         }
 
@@ -877,45 +926,48 @@ namespace OpenSim
         /// If the request contains a key, "callback" the response will be wrappend in the
         /// associated value for jsonp used with ajax/javascript
         /// </summary>
-        protected class UXSimStatusHandler : BaseStreamHandler
+        protected class UXSimStatusHandler : SimpleStreamHandler
         {
             OpenSimBase m_opensim;
 
             public UXSimStatusHandler(OpenSimBase sim)
-                : base("GET", "/" + sim.userStatsURI, "UXSimStatus", "Simulator UXStatus")
+                : base("/" + sim.userStatsURI, "UXSimStatus", "Simulator UXStatus")
             {
                 m_opensim = sim;
             }
 
-            protected override byte[] ProcessRequest(string path, Stream request,
-                                 IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
+            protected override void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
             {
-                return Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
-            }
-
-            public override string ContentType
-            {
-                get { return "text/plain"; }
+                httpResponse.KeepAlive = false;
+                try
+                {
+                    httpResponse.RawBuffer = Util.UTF8.GetBytes(m_opensim.StatReport(httpRequest));
+                    httpResponse.StatusCode = (int)HttpStatusCode.OK;
+                }
+                catch
+                {
+                    httpResponse.StatusCode = (int)HttpStatusCode.InternalServerError;
+                }
             }
         }
 
         /// <summary>
         /// handler to supply serving http://domainname:port/robots.txt
         /// </summary>
-        public class SimRobotsHandler : BaseStreamHandler
+        public class SimRobotsHandler : SimpleStreamHandler
         {
-            public SimRobotsHandler() : base("GET", "/robots.txt", "SimRobots.txt", "Simulator Robots.txt") {}
-
-            protected override byte[] ProcessRequest(string path, Stream request,
-                                 IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
+            private readonly byte[] binmsg;
+            public SimRobotsHandler() : base("/robots.txt", "SimRobots.txt", "Simulator Robots.txt")
             {
-                string robots = "# go away\nUser-agent: *\nDisallow: /\n";
-                return Util.UTF8.GetBytes(robots);
+                binmsg = Util.UTF8.GetBytes("# go away\nUser-agent: *\nDisallow: /\n");
             }
 
-            public override string ContentType
+            protected override void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
             {
-                get { return "text/plain"; }
+                httpResponse.KeepAlive = false;
+                httpResponse.RawBuffer = binmsg;
+                httpResponse.StatusCode = (int)HttpStatusCode.OK;
+                return;
             }
         }
 
