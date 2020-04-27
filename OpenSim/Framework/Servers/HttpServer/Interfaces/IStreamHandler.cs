@@ -27,6 +27,7 @@
 
 using System.Collections;
 using System.IO;
+using OpenMetaverse.StructuredData;
 
 namespace OpenSim.Framework.Servers.HttpServer
 {
@@ -92,7 +93,6 @@ namespace OpenSim.Framework.Servers.HttpServer
     public interface ISimpleStreamHandler
     {
         string Name { get; }
-        string Description { get; }
         string Path { get; }
 
         int RequestsReceived { get; }
@@ -103,4 +103,5 @@ namespace OpenSim.Framework.Servers.HttpServer
     }
 
     public delegate void SimpleStreamMethod(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse);
+    public delegate void SimpleOSDMapMethod(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse, OSDMap args);
 }

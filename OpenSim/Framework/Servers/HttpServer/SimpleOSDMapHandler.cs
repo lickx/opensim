@@ -25,51 +25,62 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using System.IO;
 using System.Net;
 using OpenSim.Framework.ServiceAuth;
+using OpenMetaverse.StructuredData;
 
 namespace OpenSim.Framework.Servers.HttpServer
 {
     /// <summary>
-    /// simple Base streamed request handler.
-    /// for well defined simple uri paths, any http method
+    /// simple OSD streamed request handler.
+    /// for well defined simple uri paths, single http method and a OSDMap encoded body
     /// </summary>
     /// <remarks>
     /// Inheriting classes should override ProcessRequest() rather than Handle()
     /// </remarks>
-    public class SimpleStreamHandler : SimpleBaseRequestHandler, ISimpleStreamHandler
+    public class SimpleOSDMapHandler : SimpleBaseRequestHandler, ISimpleStreamHandler
     {
+        protected string m_httMethod;
         protected IServiceAuth m_Auth;
-        protected SimpleStreamMethod m_processRequest;
+        protected SimpleOSDMapMethod m_processRequest;
 
-        public SimpleStreamHandler(string path) : base(path) { }
-        public SimpleStreamHandler(string path, string name) : base(path, name) { }
-
-        public SimpleStreamHandler(string path, SimpleStreamMethod processRequest) : base(path)
+        public SimpleOSDMapHandler(string httpmethod, string path) : base(path)
         {
+            m_httMethod = httpmethod.ToUpper();
+        }
+        public SimpleOSDMapHandler(string httpmethod, string path, string name) : base(path, name)
+        {
+            m_httMethod = httpmethod.ToUpper();
+        }
+        public SimpleOSDMapHandler(string httpmethod, string path, SimpleOSDMapMethod processRequest) : base(path)
+        {
+            m_httMethod = httpmethod.ToUpper();
             m_processRequest = processRequest;
         }
-        public SimpleStreamHandler(string path, SimpleStreamMethod processRequest, string name) : base(path, name)
+        public SimpleOSDMapHandler(string httpmethod, string path, SimpleOSDMapMethod processRequest, string name) : base(path, name)
         {
+            m_httMethod = httpmethod.ToUpper();
             m_processRequest = processRequest;
         }
 
-        public SimpleStreamHandler(string path, IServiceAuth auth) : base(path)
+        public SimpleOSDMapHandler(string httpmethod, string path, IServiceAuth auth) : base(path)
         {
+            m_httMethod = httpmethod.ToUpper();
             m_Auth = auth;
         }
 
-        public SimpleStreamHandler(string path, IServiceAuth auth, SimpleStreamMethod processRequest)
+        public SimpleOSDMapHandler(string httpmethod, string path, IServiceAuth auth, SimpleOSDMapMethod processRequest)
             : base(path)
         {
+            m_httMethod = httpmethod.ToUpper();
             m_Auth = auth;
             m_processRequest = processRequest;
         }
 
-        public SimpleStreamHandler(string path, IServiceAuth auth, SimpleStreamMethod processRequest, string name)
+        public SimpleOSDMapHandler(string httpmethod, string path, IServiceAuth auth, SimpleOSDMapMethod processRequest, string name)
             : base(path, name)
         {
+            m_httMethod = httpmethod.ToUpper();
             m_Auth = auth;
             m_processRequest = processRequest;
         }
@@ -77,24 +88,41 @@ namespace OpenSim.Framework.Servers.HttpServer
         public virtual void Handle(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
         {
             RequestsReceived++;
+            if(httpRequest.HttpMethod != m_httMethod)
+            {
+                httpResponse.StatusCode = (int)HttpStatusCode.NotFound;
+                return;
+            }
+            OSDMap args;
+            try
+            {
+                args = (OSDMap)OSDParser.Deserialize(httpRequest.InputStream);
+            }
+            catch
+            {
+                httpResponse.StatusCode = (int)HttpStatusCode.BadRequest;
+                return;
+            }
+            if (args == null)
+            {
+                httpResponse.StatusCode = (int)HttpStatusCode.BadRequest;
+                return;
+            }
 
             if (m_Auth != null)
             {
-                HttpStatusCode statusCode;
-
-                if (!m_Auth.Authenticate(httpRequest.Headers, httpResponse.AddHeader, out statusCode))
+                if (!m_Auth.Authenticate(httpRequest.Headers, httpResponse.AddHeader, out HttpStatusCode statusCode))
                 {
                     httpResponse.StatusCode = (int)statusCode;
                     return;
                 }
             }
-
             try
             {
-                if (m_processRequest != null)
-                    m_processRequest(httpRequest, httpResponse);
+                if(m_processRequest != null)
+                    m_processRequest(httpRequest, httpResponse, args);
                 else
-                    ProcessRequest(httpRequest, httpResponse);
+                    ProcessRequest(httpRequest, httpResponse, args);
             }
             catch
             {
@@ -104,7 +132,7 @@ namespace OpenSim.Framework.Servers.HttpServer
             RequestsHandled++;
         }
 
-        protected virtual void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
+        protected virtual void ProcessRequest(IOSHttpRequest httpRequest, IOSHttpResponse httpResponse, OSDMap args)
         {
         }
     }
