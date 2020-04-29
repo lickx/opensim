@@ -65,21 +65,14 @@ namespace OpenSim.Region.ClientStack.Linden
         int cost, UUID texturesFolder, int nreqtextures, int nreqmeshs, int nreqinstances,
         bool IsAtestUpload, ref string error, ref int nextOwnerMask, ref int groupMask, ref int everyoneMask, int[] meshesSides);
 
-    public delegate UUID UpdateItem(UUID itemID, byte[] data);
-
     public delegate void UpdateTaskScript(UUID itemID, UUID primID, bool isScriptRunning, byte[] data, ref ArrayList errors);
 
     public delegate void NewInventoryItem(UUID userID, InventoryItemBase item, uint cost);
 
     public delegate void NewAsset(AssetBase asset);
 
-    public delegate UUID ItemUpdatedCallback(UUID userID, UUID itemID, byte[] data);
-
     public delegate ArrayList TaskScriptUpdatedCallback(UUID userID, UUID itemID, UUID primID,
                                                    bool isScriptRunning, byte[] data);
-
-    public delegate InventoryCollection FetchInventoryDescendentsCAPS(UUID agentID, UUID folderID, UUID ownerID,
-                                                                          bool fetchFolders, bool fetchItems, int sortOrder, out int version);
 
     /// <summary>
     /// XXX Probably not a particularly nice way of allow us to get the scene presence from the scene (chiefly so that
@@ -88,7 +81,7 @@ namespace OpenSim.Region.ClientStack.Linden
     /// </summary>
     public delegate IClientAPI GetClientDelegate(UUID agentID);
 
-    public class BunchOfCaps
+    public partial class BunchOfCaps
     {
         private static readonly ILog m_log =
             LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -107,7 +100,6 @@ namespace OpenSim.Region.ClientStack.Linden
         public NewAsset AddNewAsset = null;
         public ItemUpdatedCallback ItemUpdatedCall = null;
         public TaskScriptUpdatedCallback TaskScriptUpdatedCall = null;
-        public FetchInventoryDescendentsCAPS CAPSFetchInventoryDescendents = null;
         public GetClientDelegate GetClient = null;
 
         private bool m_persistBakedTextures = false;
@@ -224,12 +216,12 @@ namespace OpenSim.Region.ClientStack.Linden
             else
                 m_scopeID = account.ScopeID;
 
-            RegisterHandlers();
-
             AddNewInventoryItem = m_Scene.AddUploadedInventoryItem;
-            ItemUpdatedCall = m_Scene.CapsUpdateInventoryItemAsset;
+            ItemUpdatedCall = m_Scene.CapsUpdateItemAsset;
             TaskScriptUpdatedCall = m_Scene.CapsUpdateTaskInventoryScriptAsset;
             GetClient = m_Scene.SceneGraph.GetControllingClient;
+
+            RegisterHandlers();
 
             m_FileAgentInventoryState = FileAgentInventoryState.idle;
         }
@@ -312,12 +304,22 @@ namespace OpenSim.Region.ClientStack.Linden
                     new LLSDStreamhandler<LLSDAssetUploadRequest, LLSDAssetUploadResponse>(
                         "POST", GetNewCapPath(), NewAgentInventoryRequest, "NewFileAgentInventory", null));
 
-                IRequestHandler req = new RestStreamHandler(
-                        "POST",  GetNewCapPath(), NoteCardAgentInventory, "Update*", null);
-                m_HostCapsObj.RegisterHandler("UpdateNotecardAgentInventory", req);
-                m_HostCapsObj.RegisterHandler("UpdateAnimSetAgentInventory", req);
-                m_HostCapsObj.RegisterHandler("UpdateScriptAgentInventory", req);
-                m_HostCapsObj.RegisterHandler("UpdateScriptAgent", req);
+                if(ItemUpdatedCall != null)
+                {
+                    // we have a single "do it all" method
+                    var oreq = new SimpleOSDMapHandler("POST", GetNewCapPath(), UpdateInventoryItemAsset);
+
+                    // first also sets the http handler, others only register the cap, using it
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateNotecardAgentInventory", oreq, true); 
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateNotecardTaskInventory", oreq, false); // a object inv
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateAnimSetAgentInventory", oreq, false);
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateScriptAgentInventory", oreq, false);
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateScriptAgent", oreq, false);
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateSettingsAgentInventory", oreq, false);
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateSettingsTaskInventory", oreq, false); // a object inv
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateGestureAgentInventory", oreq, false);
+                    m_HostCapsObj.RegisterSimpleHandler("UpdateGestureTaskInventory", oreq, false);
+                }
 
                 m_HostCapsObj.RegisterSimpleHandler("UpdateAgentInformation",
                     new SimpleStreamHandler(GetNewCapPath(), UpdateAgentInformation));
@@ -499,11 +501,11 @@ namespace OpenSim.Region.ClientStack.Linden
         /// <param name="itemID">Item to update</param>
         /// <param name="data">New asset data</param>
         /// <returns></returns>
-        public UUID ItemUpdated(UUID itemID, byte[] data)
+        public UUID ItemUpdated(UUID itemID, UUID objectID, byte[] data)
         {
             if (ItemUpdatedCall != null)
             {
-                return ItemUpdatedCall(m_HostCapsObj.AgentID, itemID, data);
+                return ItemUpdatedCall(m_HostCapsObj.AgentID, itemID, objectID, data);
             }
 
             return UUID.Zero;
@@ -1357,56 +1359,10 @@ namespace OpenSim.Region.ClientStack.Linden
             httpResponse.StatusCode = (int)HttpStatusCode.BadRequest;
         }
 
-        /// <summary>
-        /// Called by the notecard update handler.  Provides a URL to which the client can upload a new asset.
-        /// </summary>
-        /// <param name="request"></param>
-        /// <param name="path"></param>
-        /// <param name="param"></param>
-        /// <returns></returns>
-        public string NoteCardAgentInventory(string request, string path, string param,
-                                             IOSHttpRequest httpRequest, IOSHttpResponse httpResponse)
-        {
-            //m_log.Debug("[CAPS]: NoteCardAgentInventory Request in region: " + m_regionName + "\n" + request);
-            //m_log.Debug("[CAPS]: NoteCardAgentInventory Request is: " + request);
-
-            //OpenMetaverse.StructuredData.OSDMap hash = (OpenMetaverse.StructuredData.OSDMap)OpenMetaverse.StructuredData.LLSDParser.DeserializeBinary(Utils.StringToBytes(request));
-            Hashtable hash = (Hashtable)LLSD.LLSDDeserialize(Utils.StringToBytes(request));
-            LLSDItemUpdate llsdRequest = new LLSDItemUpdate();
-            LLSDHelpers.DeserialiseOSDMap(hash, llsdRequest);
-
-            string uploaderPath = GetNewCapPath();
-
-            ItemUpdater uploader =
-                new ItemUpdater(llsdRequest.item_id, uploaderPath, m_HostCapsObj.HttpListener, m_dumpAssetsToFile);
-            uploader.OnUpLoad += ItemUpdated;
-
-            m_HostCapsObj.HttpListener.AddStreamHandler(
-                new BinaryStreamHandler(
-                    "POST", uploaderPath, uploader.uploaderCaps, "NoteCardAgentInventory", null));
-
-            string protocol = "http://";
-
-            if (m_HostCapsObj.SSLCaps)
-                protocol = "https://";
-
-            string uploaderURL = protocol + m_HostCapsObj.HostName + ":" + m_HostCapsObj.Port.ToString() + uploaderPath;
-
-            LLSDAssetUploadResponse uploadResponse = new LLSDAssetUploadResponse();
-            uploadResponse.uploader = uploaderURL;
-            uploadResponse.state = "upload";
-
-            //            m_log.InfoFormat("[CAPS]: " +
-            //                             "NoteCardAgentInventory response: {0}",
-            //                             LLSDHelpers.SerialiseLLSDReply(uploadResponse)));
-
-            return LLSDHelpers.SerialiseLLSDReply(uploadResponse);
-        }
-
 
         private string CopyInventoryFromNotecardError(IOSHttpResponse response)
         {
-            response.StatusCode = (int)System.Net.HttpStatusCode.NotFound;
+            response.StatusCode = (int)HttpStatusCode.NotFound;
             response.StatusDescription = "";
             return "";
         }
@@ -2337,89 +2293,7 @@ namespace OpenSim.Region.ClientStack.Linden
         }
     }
 
-    /// <summary>
-    /// This class is a callback invoked when a client sends asset data to
-    /// an agent inventory notecard update url
-    /// </summary>
-    public class ItemUpdater
-    {
-        public event UpdateItem OnUpLoad;
 
-        private UpdateItem handlerUpdateItem = null;
-
-        private string uploaderPath = String.Empty;
-        private UUID inventoryItemID;
-        private IHttpServer httpListener;
-        private bool m_dumpAssetToFile;
-
-        public ItemUpdater(UUID inventoryItem, string path, IHttpServer httpServer, bool dumpAssetToFile)
-        {
-            m_dumpAssetToFile = dumpAssetToFile;
-
-            inventoryItemID = inventoryItem;
-            uploaderPath = path;
-            httpListener = httpServer;
-        }
-
-        /// <summary>
-        /// Handle raw uploaded asset data.
-        /// </summary>
-        /// <param name="data"></param>
-        /// <param name="path"></param>
-        /// <param name="param"></param>
-        /// <returns></returns>
-        public string uploaderCaps(byte[] data, string path, string param)
-        {
-            UUID inv = inventoryItemID;
-            string res = String.Empty;
-            LLSDAssetUploadComplete uploadComplete = new LLSDAssetUploadComplete();
-            UUID assetID = UUID.Zero;
-            handlerUpdateItem = OnUpLoad;
-            if (handlerUpdateItem != null)
-            {
-                assetID = handlerUpdateItem(inv, data);
-            }
-
-            uploadComplete.new_asset = assetID.ToString();
-            uploadComplete.new_inventory_item = inv;
-            uploadComplete.state = "complete";
-
-            res = LLSDHelpers.SerialiseLLSDReply(uploadComplete);
-
-            httpListener.RemoveStreamHandler("POST", uploaderPath);
-
-            if (m_dumpAssetToFile)
-            {
-                SaveAssetToFile("updateditem" + Util.RandomClass.Next(1, 1000) + ".dat", data);
-            }
-
-            return res;
-        }
-
-        ///Left this in and commented in case there are unforseen issues
-        //private void SaveAssetToFile(string filename, byte[] data)
-        //{
-        //    FileStream fs = File.Create(filename);
-        //    BinaryWriter bw = new BinaryWriter(fs);
-        //    bw.Write(data);
-        //    bw.Close();
-        //    fs.Close();
-        //}
-
-        private static void SaveAssetToFile(string filename, byte[] data)
-        {
-            string assetPath = "UserAssets";
-            if (!Directory.Exists(assetPath))
-            {
-                Directory.CreateDirectory(assetPath);
-            }
-            FileStream fs = File.Create(Path.Combine(assetPath, filename));
-            BinaryWriter bw = new BinaryWriter(fs);
-            bw.Write(data);
-            bw.Close();
-            fs.Close();
-        }
-    }
 
     /// <summary>
     /// This class is a callback invoked when a client sends asset data to
