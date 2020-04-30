@@ -247,6 +247,18 @@ namespace OpenSim.Framework
         public static Encoding UTF8 = Encoding.UTF8;
         public static Encoding UTF8NoBomEncoding = new UTF8Encoding(false);
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static byte[] UTF8Getbytes(string s)
+        {
+            return UTF8.GetBytes(s);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static byte[] UTF8NBGetbytes(string s)
+        {
+            return UTF8NoBomEncoding.GetBytes(s);
+        }
+
         /// <value>
         /// Well known UUID for the blank texture used in the Linden SL viewer version 1.20 (and hopefully onwards)
         /// </value>
@@ -3693,7 +3705,20 @@ namespace OpenSim.Framework
             return result;
         }
 
-    }
+        public static void SaveAssetToFile(string filename, byte[] data)
+        {
+            string assetPath = "UserAssets";
+            if (!Directory.Exists(assetPath))
+            {
+                Directory.CreateDirectory(assetPath);
+            }
+            FileStream fs = File.Create(Path.Combine(assetPath, filename));
+            BinaryWriter bw = new BinaryWriter(fs);
+            bw.Write(data);
+            bw.Close();
+            fs.Close();
+        }
+        }
 
 /*  don't like this code
     public class DoubleQueue<T> where T:class
@@ -3857,6 +3882,7 @@ namespace OpenSim.Framework
         {
             rng.GetBytes(buff);
         }
+
 
     }
 }
