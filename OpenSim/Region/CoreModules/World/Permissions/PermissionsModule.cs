@@ -95,6 +95,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         private bool m_forceAdminModeAlwaysOn;
         private bool m_allowAdminActionsWithoutGodMode;
         private bool m_hardenPermissions = false;
+        private bool m_takeCopyRestricted = false;
 
         /// <value>
         /// The set of users that are allowed to create scripts.  This is only active if permissions are not being
@@ -192,6 +193,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 m_log.Debug("[PERMISSIONS]: Enabling all region service permission checks");
 
             m_hardenPermissions = Util.GetConfigVarFromSections<bool>(config, "harden_permissions", sections, false);
+            m_takeCopyRestricted = Util.GetConfigVarFromSections<bool>(config, "take_copy_restricted", sections, false);
 
             string grant = Util.GetConfigVarFromSections<string>(config, "GrantLSL",
                 new string[] { "Startup", "Permissions" }, string.Empty);
@@ -2092,6 +2094,11 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         {
             DebugPermissionInformation(MethodInfo.GetCurrentMethod().Name);
             if (m_bypassPermissions) return m_bypassPermissionsValue;
+
+            if (m_takeCopyRestricted && sp.UUID != sog.OwnerID) {
+                sp.ControllingClient.SendAgentAlertMessage("'Take copy' is disabled in this sim", false);
+                return false;
+            }
 
             if (sog == null || sog.IsDeleted || sp == null || sp.IsDeleted)
                 return false;
