@@ -398,7 +398,7 @@ namespace OpenSim.Region.ClientStack.Linden
 
             if (m_GetTextureURL == "localhost")
             {
-                string capUrl = "/CAPS/" + UUID.Random() + "/";
+                string capUrl = "/" + UUID.Random();
 
                 // Register this as a poll service
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
@@ -420,7 +420,7 @@ namespace OpenSim.Region.ClientStack.Linden
             //GetMesh
             if (m_GetMeshURL == "localhost")
             {
-                string capUrl = "/CAPS/" + UUID.Random() + "/";
+                string capUrl = "/" + UUID.Random();
 
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
                 //args.Type = PollServiceEventArgs.EventType.Mesh;
@@ -438,7 +438,7 @@ namespace OpenSim.Region.ClientStack.Linden
             //GetMesh2
             if (m_GetMesh2URL == "localhost")
             {
-                string capUrl = "/CAPS/" + UUID.Random() + "/";
+                string capUrl = "/" + UUID.Random();
 
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
                 //args.Type = PollServiceEventArgs.EventType.Mesh2;
@@ -457,7 +457,7 @@ namespace OpenSim.Region.ClientStack.Linden
             //ViewerAsset
             if (m_GetAssetURL == "localhost")
             {
-                string capUrl = "/CAPS/" + UUID.Random() + "/";
+                string capUrl = "/" + UUID.Random();
 
                 PollServiceAssetEventArgs args = new PollServiceAssetEventArgs(capUrl, agentID, m_scene);
                 //args.Type = PollServiceEventArgs.EventType.Asset;
