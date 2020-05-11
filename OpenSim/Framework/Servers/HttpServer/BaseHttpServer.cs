@@ -101,7 +101,7 @@ namespace OpenSim.Framework.Servers.HttpServer
         protected Dictionary<string, GenericHTTPMethod> m_HTTPHandlers  = new Dictionary<string, GenericHTTPMethod>();
 //        protected Dictionary<string, IHttpAgentHandler> m_agentHandlers = new Dictionary<string, IHttpAgentHandler>();
         protected ConcurrentDictionary<string, PollServiceEventArgs> m_pollHandlers = new ConcurrentDictionary<string, PollServiceEventArgs>();
-        protected Dictionary<string, WebSocketRequestDelegate> m_WebSocketHandlers = new Dictionary<string, WebSocketRequestDelegate>();
+        protected ConcurrentDictionary<string, WebSocketRequestDelegate> m_WebSocketHandlers = new ConcurrentDictionary<string, WebSocketRequestDelegate>();
 
         protected ConcurrentDictionary<string, IRequestHandler> m_streamHandlers = new ConcurrentDictionary<string, IRequestHandler>();
         protected ConcurrentDictionary<string, ISimpleStreamHandler> m_simpleStreamHandlers = new ConcurrentDictionary<string, ISimpleStreamHandler>();
@@ -354,18 +354,12 @@ namespace OpenSim.Framework.Servers.HttpServer
 
         public void AddWebSocketHandler(string servicepath, WebSocketRequestDelegate handler)
         {
-            lock (m_WebSocketHandlers)
-            {
-                if (!m_WebSocketHandlers.ContainsKey(servicepath))
-                    m_WebSocketHandlers.Add(servicepath, handler);
-            }
+            m_WebSocketHandlers.TryAdd(servicepath, handler);
         }
 
         public void RemoveWebSocketHandler(string servicepath)
         {
-            lock (m_WebSocketHandlers)
-                if (m_WebSocketHandlers.ContainsKey(servicepath))
-                    m_WebSocketHandlers.Remove(servicepath);
+            m_WebSocketHandlers.TryRemove(servicepath, out WebSocketRequestDelegate dummy);
         }
 
         public List<string> GetStreamHandlerKeys()
@@ -548,48 +542,36 @@ namespace OpenSim.Framework.Servers.HttpServer
             return null;
         }
 
-
         public void OnRequest(object source, RequestEventArgs args)
         {
             RequestNumber++;
             try
             {
-                IHttpClientContext context = (IHttpClientContext)source;
                 IHttpRequest request = args.Request;
-                if (TryGetPollServiceHTTPHandler(request.UriPath, out PollServiceEventArgs psEvArgs))
+                OSHttpRequest osRequest = new OSHttpRequest(request);
+
+                if(m_WebSocketHandlers.TryGetValue(osRequest.RawUrl, out WebSocketRequestDelegate dWebSocketRequestDelegate))
+                {
+                    dWebSocketRequestDelegate?.Invoke(osRequest.Url.AbsolutePath, new WebSocketHttpServerHandler(osRequest, 8192));
+                    return;
+                }
+
+                if (TryGetPollServiceHTTPHandler(Util.TrimEndSlash(request.UriPath), out PollServiceEventArgs psEvArgs))
                 {
                     psEvArgs.RequestsReceived++;
-                    PollServiceHttpRequest psreq = new PollServiceHttpRequest(psEvArgs, context, request);
-                    psEvArgs.Request?.Invoke(psreq.RequestID, new OSHttpRequest(request));
+                    PollServiceHttpRequest psreq = new PollServiceHttpRequest(psEvArgs, request);
+                    psEvArgs.Request?.Invoke(psreq.RequestID, osRequest);
                     m_pollServiceManager.Enqueue(psreq);
                 }
                 else
                 {
-                    OnHandleRequestIOThread(request);
+                    HandleRequest(osRequest, new OSHttpResponse(osRequest));
                 }
             }
             catch (Exception e)
             {
                 m_log.Error(String.Format("[BASE HTTP SERVER]: OnRequest() failed: {0} ", e.Message), e);
             }
-        }
-
-        private void OnHandleRequestIOThread(IHttpRequest request)
-        {
-            OSHttpRequest req = new OSHttpRequest(request);
-            WebSocketRequestDelegate dWebSocketRequestDelegate = null;
-            lock (m_WebSocketHandlers)
-            {
-                if (m_WebSocketHandlers.ContainsKey(req.RawUrl))
-                    dWebSocketRequestDelegate = m_WebSocketHandlers[req.RawUrl];
-            }
-            if (dWebSocketRequestDelegate != null)
-            {
-                dWebSocketRequestDelegate(req.Url.AbsolutePath, new WebSocketHttpServerHandler(req, request.Context, 8192));
-                return;
-            }
-
-            HandleRequest(req, new OSHttpResponse(req));
         }
 
         /// <summary>
@@ -672,10 +654,7 @@ namespace OpenSim.Framework.Servers.HttpServer
                     return;
                 }
 
-                // workaround for Lumiya and others that append a extra /
-                int len = path.Length - 1;
-                if (len > 1 && path[len] == '/' && path[len - 1] == '/')
-                    path = path.Substring(0, len);
+                path = Util.TrimEndSlash(path);
 
                 if (TryGetSimpleStreamHandler(path, out ISimpleStreamHandler hdr))
                 {
@@ -979,39 +958,35 @@ namespace OpenSim.Framework.Servers.HttpServer
             }
         }
 
-        private readonly string HANDLER_SEPARATORS = "/?&#-";
-
         private bool TryGetStreamHandler(string handlerKey, out IRequestHandler streamHandler)
         {
             if(m_streamHandlers.TryGetValue(handlerKey, out streamHandler))
                 return true;
 
             string bestMatch = null;
+            bool hasbest=false;
 
             lock (m_streamHandlers)
             {
                 foreach (string pattern in m_streamHandlers.Keys)
                 {
-                    if (handlerKey.StartsWith(pattern) && (HANDLER_SEPARATORS.IndexOf(handlerKey[pattern.Length]) >= 0))
+                    if (handlerKey.StartsWith(pattern))
                     {
-                        if (String.IsNullOrEmpty(bestMatch) || pattern.Length > bestMatch.Length)
+                        if (!hasbest || pattern.Length > bestMatch.Length)
                         {
                             bestMatch = pattern;
+                            hasbest = true;
                         }
                     }
                 }
-
-                if (String.IsNullOrEmpty(bestMatch))
-                {
-                    streamHandler = null;
-                    return false;
-                }
-                else
-                {
-                    streamHandler = m_streamHandlers[bestMatch];
-                    return true;
-                }
             }
+            if (hasbest)
+            {
+                streamHandler = m_streamHandlers[bestMatch];
+                return true;
+            }
+            streamHandler = null;
+            return false;
         }
 
         private bool TryGetPollServiceHTTPHandler(string handlerKey, out PollServiceEventArgs oServiceEventArgs)
@@ -1019,66 +994,42 @@ namespace OpenSim.Framework.Servers.HttpServer
             if(m_pollHandlers.TryGetValue(handlerKey, out oServiceEventArgs))
                 return true;
 
-            string bestMatch = null;
-
-            lock (m_pollHandlers)
-            {
-                foreach (string pattern in m_pollHandlers.Keys)
-                {
-                    if ((handlerKey == pattern)
-                        || (handlerKey.StartsWith(pattern) && (HANDLER_SEPARATORS.IndexOf(handlerKey[pattern.Length]) >= 0)))
-                    {
-                        if (String.IsNullOrEmpty(bestMatch) || pattern.Length > bestMatch.Length)
-                        {
-                            bestMatch = pattern;
-                        }
-                    }
-                }
-
-                if (String.IsNullOrEmpty(bestMatch))
-                {
-                    oServiceEventArgs = null;
-                    return false;
-                }
-                else
-                {
-                    oServiceEventArgs = m_pollHandlers[bestMatch];
-                    return true;
-                }
-            }
+            oServiceEventArgs = null;
+            return false;
         }
 
         private bool TryGetHTTPHandler(string handlerKey, out GenericHTTPMethod HTTPHandler)
         {
 //            m_log.DebugFormat("[BASE HTTP HANDLER]: Looking for HTTP handler for {0}", handlerKey);
 
+            if(m_HTTPHandlers.TryGetValue(handlerKey, out HTTPHandler))
+                return true;
+
             string bestMatch = null;
+            bool hasmatch = false;
 
             lock (m_HTTPHandlers)
             {
                 foreach (string pattern in m_HTTPHandlers.Keys)
                 {
-                    if ((handlerKey == pattern)
-                        || (handlerKey.StartsWith(pattern) && (HANDLER_SEPARATORS.IndexOf(handlerKey[pattern.Length]) >= 0)))
+                    if (handlerKey.StartsWith(pattern))
                     {
-                        if (String.IsNullOrEmpty(bestMatch) || pattern.Length > bestMatch.Length)
+                        if (!hasmatch || pattern.Length > bestMatch.Length)
                         {
                             bestMatch = pattern;
+                            hasmatch = true;
                         }
                     }
                 }
-
-                if (String.IsNullOrEmpty(bestMatch))
-                {
-                    HTTPHandler = null;
-                    return false;
-                }
-                else
-                {
-                    HTTPHandler = m_HTTPHandlers[bestMatch];
-                    return true;
-                }
             }
+            if (hasmatch)
+            {
+                HTTPHandler = m_HTTPHandlers[bestMatch];
+                return true;
+            }
+
+            HTTPHandler = null;
+            return false;
         }
 
         private bool TryGetSimpleStreamHandler(string uripath, out ISimpleStreamHandler handler)
@@ -1086,6 +1037,7 @@ namespace OpenSim.Framework.Servers.HttpServer
             if(m_simpleStreamHandlers.TryGetValue(uripath, out handler))
                 return true;
 
+            // look only for keyword before second slash ( /keyword/someparameter/... )
             handler = null;
             if(uripath.Length < 3)
                 return false;
