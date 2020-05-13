@@ -108,6 +108,8 @@ namespace OpenSim.Framework.Servers.HttpServer
         protected ConcurrentDictionary<string, ISimpleStreamHandler> m_simpleStreamVarPath = new ConcurrentDictionary<string, ISimpleStreamHandler>();
         protected ConcurrentDictionary<string, SimpleStreamMethod> m_indexPHPmethods = new ConcurrentDictionary<string, SimpleStreamMethod>();
 
+        protected IRequestHandler m_RootDefaultGET = null; // default method for root path. does override rpc xml and json, and old llsd login
+
         protected uint m_port;
         protected bool m_ssl;
         private X509Certificate2 m_cert;
@@ -328,6 +330,15 @@ namespace OpenSim.Framework.Servers.HttpServer
         {
             string httpMethod = handler.HttpMethod;
             string path = handler.Path;
+
+            if(path == "/")
+            {
+                if(httpMethod == "GET")
+                    m_RootDefaultGET = handler;
+
+                return;
+            }
+
             string handlerKey = GetHandlerKey(httpMethod, path);
 
             // m_log.DebugFormat("[BASE HTTP SERVER]: Adding handler key {0}", handlerKey);
@@ -345,8 +356,7 @@ namespace OpenSim.Framework.Servers.HttpServer
 
         public void AddSimpleStreamHandler(ISimpleStreamHandler handler, bool varPath = false)
         {
-            // m_log.DebugFormat("[BASE HTTP SERVER]: Adding handler key {0}", handlerKey);
-            if(varPath)
+            if (varPath)
                 m_simpleStreamVarPath.TryAdd(handler.Path, handler);
             else
                 m_simpleStreamHandlers.TryAdd(handler.Path, handler);
@@ -620,6 +630,23 @@ namespace OpenSim.Framework.Servers.HttpServer
                 if (path == "/")
                 {
                     response.StatusCode = (int)HttpStatusCode.NotFound; // default
+
+                    if (m_RootDefaultGET != null && request.HttpMethod == "GET")
+                    {
+                        if(m_RootDefaultGET is IStreamedRequestHandler)
+                        {
+                            IStreamedRequestHandler isrh = m_RootDefaultGET as IStreamedRequestHandler;
+                            response.RawBuffer = isrh.Handle(path, request.InputStream, request, response);
+                            response.StatusCode = (int)HttpStatusCode.OK;
+                        }
+                        if (request.InputStream != null && request.InputStream.CanRead)
+                            request.InputStream.Dispose();
+
+                        requestEndTick = Environment.TickCount;
+                        response.Send();
+                        return;
+                    }
+
                     switch (request.ContentType)
                     {
                         case "application/json-rpc":

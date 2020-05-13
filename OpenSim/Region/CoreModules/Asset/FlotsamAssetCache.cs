@@ -895,46 +895,31 @@ namespace OpenSim.Region.CoreModules.Asset
                     if(!m_timerRunning && !storeUncached)
                         return;
 
-                    foreach (UUID assetID in gatherer.GatheredUuids.Keys)
-                    {
-                        if (!assetsFound.ContainsKey(assetID))
-                        {
-                            string filename = GetFileName(assetID.ToString());
-
-                            if (File.Exists(filename))
-                            {
-                                UpdateFileLastAccessTime(filename);
-                                assetsFound[assetID] = true;
-                            }
-                            else if (storeUncached)
-                            {
-                                AssetBase cachedAsset = m_AssetService.Get(assetID.ToString());
-                                if (cachedAsset == null && gatherer.GatheredUuids[assetID] != (sbyte)AssetType.Unknown)
-                                    assetsFound[assetID] = false;
-                                else
-                                    assetsFound[assetID] = true;
-                            }
-                        }
-                        else if (!assetsFound[assetID])
-                        {
-                            m_log.DebugFormat(
-                                "[FLOTSAM ASSET CACHE]: Could not find asset {0}, type {1} referenced by object {2} at {3} in scene {4} when pre-caching all scene assets",
-                                assetID, gatherer.GatheredUuids[assetID], e.Name, e.AbsolutePosition, s.Name);
-                        }
-                    }
-
-                    gatherer.GatheredUuids.Clear();
-                    if(!m_timerRunning && !storeUncached)
-                        return;
-
                     if(!storeUncached)
                         Thread.Sleep(50);
                 });
                 if(!m_timerRunning && !storeUncached)
                     break;
+                gatherer.GatherAll();
             }
 
-            return assetsFound.Count;
+            gatherer.GatherAll();
+
+            // windows does not update access time :(
+            foreach(UUID id in gatherer.GatheredUuids.Keys)
+            {
+                string idstr = id.ToString();
+                if(!UpdateFileLastAccessTime(GetFileName(idstr)))
+                    m_AssetService.Get(idstr);
+            }
+
+            int count = gatherer.GatheredUuids.Count;
+            gatherer.GatheredUuids.Clear();
+            gatherer.FailedUUIDs.Clear();
+            gatherer.UncertainAssetsUUIDs.Clear();
+
+            GC.Collect();
+            return count;
         }
 
         /// <summary>
