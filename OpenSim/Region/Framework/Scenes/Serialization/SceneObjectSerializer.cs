@@ -29,8 +29,8 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Xml;
 using log4net;
 using OpenMetaverse;
@@ -63,7 +63,7 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
             String fixedData = ExternalRepresentationUtils.SanitizeXml(xmlData);
             using (XmlTextReader wrappedReader = new XmlTextReader(fixedData, XmlNodeType.Element, null))
             {
-                using (XmlReader reader = XmlReader.Create(wrappedReader, new XmlReaderSettings() { IgnoreWhitespace = true, ConformanceLevel = ConformanceLevel.Fragment}))
+                using (XmlReader reader = XmlReader.Create(wrappedReader, new XmlReaderSettings() { IgnoreWhitespace = true, ConformanceLevel = ConformanceLevel.Fragment }))
                 {
                     try
                     {
@@ -73,6 +73,32 @@ namespace OpenSim.Region.Framework.Scenes.Serialization
                     {
                         m_log.Error("[SERIALIZER]: Deserialization of xml failed ", e);
                         Util.LogFailedXML("[SERIALIZER]:", fixedData);
+                        return null;
+                    }
+                }
+            }
+        }
+
+        public static SceneObjectGroup FromOriginalXmlData(byte[] data)
+        {
+            int len = data.Length;
+            if(len < 32)
+                return null;
+            if(data[len -1 ] == 0)
+                --len;
+
+            MemoryStream ms = new MemoryStream(data,0, len, false);
+            using(StreamReader sr = new StreamReader(ms, Encoding.UTF8))
+            {
+                using (XmlReader reader = XmlReader.Create(ms, new XmlReaderSettings() { IgnoreWhitespace = true, ConformanceLevel = ConformanceLevel.Fragment }))
+                {
+                    try
+                    {
+                        return FromOriginalXmlFormat(reader);
+                    }
+                    catch (Exception e)
+                    {
+                        m_log.Error("[SERIALIZER]: Deserialization of xml data failed ", e);
                         return null;
                     }
                 }
