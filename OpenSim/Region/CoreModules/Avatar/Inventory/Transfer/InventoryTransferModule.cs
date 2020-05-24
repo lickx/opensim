@@ -323,13 +323,6 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
                             previousParentFolderID = folder.ParentID;
                             folder.ParentID = destinationFolderID;
                             invService.MoveFolder(folder);
-                            if (folder.Name.StartsWith(destinationFolder.Name + "/", System.StringComparison.CurrentCulture))
-                            {
-                                // Hack for mantis 6311; if the folder in question has the destination folder as prefix, strip off the
-                                // destination folder name as it's already moved there. For instance "#RLV/~mytest" -> "~mytest"
-                                folder.Name = folder.Name.Substring(destinationFolder.Name.Length + 1);
-                                invService.UpdateFolder(folder);
-                            }
                         }
                     }
                 }
