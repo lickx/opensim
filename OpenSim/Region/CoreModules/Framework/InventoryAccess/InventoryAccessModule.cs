@@ -226,9 +226,9 @@ namespace OpenSim.Region.CoreModules.Framework.InventoryAccess
                     groupmask = (uint)PermissionMask.AllAndExport;
                     everyonemask = (uint)(PermissionMask.AllAndExport & ~PermissionMask.Modify);                   
                 }
-/*
                 if(assetType == (byte)AssetType.Settings)
                 {
+                    /* this is wrong subtype may need to be checked
                     if(data == null)
                     {
                         IEnvironmentModule envModule = m_Scene.RequestModuleInterface<IEnvironmentModule>();
@@ -242,11 +242,10 @@ namespace OpenSim.Region.CoreModules.Framework.InventoryAccess
                             return;
                         }
                     }
+                    */
                     flags = subType;
                 }
-                else
-*/			
-				if( assetType == (byte)AssetType.Clothing ||
+                else if( assetType == (byte)AssetType.Clothing ||
                          assetType == (byte)AssetType.Bodypart)
                     flags = subType;
 
