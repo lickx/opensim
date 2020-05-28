@@ -323,6 +323,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
                             previousParentFolderID = folder.ParentID;
                             folder.ParentID = destinationFolderID;
                             invService.MoveFolder(folder);
+                            client.SendBulkUpdateInventory(folder);
                         }
                     }
                 }
@@ -336,6 +337,8 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
 
                     scene.SendInventoryUpdate(client, destinationFolder, true, true);
                 }
+
+                client.SendBulkUpdateInventory(destinationFolder);
             }
             else if (im.dialog == (byte)InstantMessageDialog.InventoryDeclined ||
                     im.dialog == (byte)InstantMessageDialog.TaskInventoryDeclined)
