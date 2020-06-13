@@ -4848,11 +4848,13 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 byte[] bucket = new byte[1];
                 bucket[0] = (byte)item.Type;
 
+                Vector3 pos = m_host.AbsolutePosition;
+
                 GridInstantMessage msg = new GridInstantMessage(World,
                         m_host.OwnerID, m_host.Name, destId,
                         (byte)InstantMessageDialog.TaskInventoryOffered,
-                        m_host.OwnerID == m_host.GroupID, "'"+item.Name+"'. ("+m_host.Name+" is located at "+
-                        World.RegionInfo.RegionName+" "+ m_host.AbsolutePosition.ToString() + ")",
+                        m_host.OwnerID == m_host.GroupID, 
+                        string.Format("'{0}'  ( http://slurl.com/secondlife/{1}/{2}/{3}/{4} )", item.Name, World.RegionInfo.RegionName, (int)pos.X, (int)pos.Y, (int)pos.Z),
                         agentItem.ID, true, m_host.AbsolutePosition,
                         bucket, true);
 
