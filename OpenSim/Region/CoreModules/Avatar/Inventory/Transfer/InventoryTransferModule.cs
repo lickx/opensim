@@ -74,12 +74,15 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
             if (!m_Enabled)
                 return;
 
-            m_Scenelist.Add(scene);
+            lock (m_Scenelist)
+            {
+                m_Scenelist.Add(scene);
 
-//            scene.RegisterModuleInterface<IInventoryTransferModule>(this);
+                //              scene.RegisterModuleInterface<IInventoryTransferModule>(this);
 
-            scene.EventManager.OnNewClient += OnNewClient;
-            scene.EventManager.OnIncomingInstantMessage += OnGridInstantMessage;
+                scene.EventManager.OnNewClient += OnNewClient;
+                scene.EventManager.OnIncomingInstantMessage += OnGridInstantMessage;
+            }
         }
 
         public void RegionLoaded(Scene scene)
@@ -101,9 +104,12 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
 
         public void RemoveRegion(Scene scene)
         {
-            scene.EventManager.OnNewClient -= OnNewClient;
-            scene.EventManager.OnIncomingInstantMessage -= OnGridInstantMessage;
-            m_Scenelist.Remove(scene);
+            lock (m_Scenelist)
+            {
+                scene.EventManager.OnNewClient -= OnNewClient;
+                scene.EventManager.OnIncomingInstantMessage -= OnGridInstantMessage;
+                m_Scenelist.Remove(scene);
+            }
         }
 
         public void PostInitialise()
@@ -334,8 +340,6 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
                     InventoryFolderBase previousParentFolder = invService.GetFolder(agentID, previousParentFolderID.Value);
                     if(previousParentFolder != null)
                         scene.SendInventoryUpdate(client, previousParentFolder, true, true);
-
-                    scene.SendInventoryUpdate(client, destinationFolder, true, true);
                 }
 
                 client.SendBulkUpdateInventory(destinationFolder);
@@ -469,7 +473,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
                 }
                 user.ControllingClient.SendInstantMessage(im);
             }
-            if (im.dialog == (byte) InstantMessageDialog.TaskInventoryOffered)
+            else if (im.dialog == (byte) InstantMessageDialog.TaskInventoryOffered)
             {
                 if (im.binaryBucket.Length < 1) // Invalid
                     return;
