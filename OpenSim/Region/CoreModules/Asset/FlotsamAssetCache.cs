@@ -630,10 +630,14 @@ namespace OpenSim.Region.CoreModules.Asset
 
         private void CleanupExpiredFiles(object source, ElapsedEventArgs e)
         {
+            long heap = 0;
             if (m_LogLevel >= 2)
-                m_log.DebugFormat("[FLOTSAM ASSET CACHE]: Checking for expired files older then {0}.", m_FileExpiration);
+            {
+                m_log.DebugFormat("[FLOTSAM ASSET CACHE]: Start automatic Check for expired files older then {0}.", m_FileExpiration);
+                heap = GC.GetTotalMemory(false);
+            }
 
-            lock(timerLock)
+            lock (timerLock)
             {
                 if(!m_timerRunning || m_cleanupRunning)
                     return;
@@ -658,6 +662,13 @@ namespace OpenSim.Region.CoreModules.Asset
                     m_CacheCleanTimer.Start();
                 m_cleanupRunning = false;
             }
+            if (m_LogLevel >= 2)
+            {
+                heap = GC.GetTotalMemory(false) - heap;
+                double fheap = Math.Round((double)(heap / (1024 * 1024)),3);
+                m_log.DebugFormat("[FLOTSAM ASSET CACHE]: Finished automatic Check for expired files heap delta: {0}MB.", fheap);
+                heap = GC.GetTotalMemory(false);
+            }
         }
 
         /// <summary>
@@ -679,6 +690,12 @@ namespace OpenSim.Region.CoreModules.Asset
                     if (File.GetLastAccessTime(file) < purgeLine)
                     {
                         File.Delete(file);
+                        string id = Path.GetFileName(file);
+                        if(!String.IsNullOrEmpty(id))
+                        {
+                            lock (weakAssetReferencesLock)
+                                weakAssetReferences.Remove(id);
+                        }
                     }
                 }
 
