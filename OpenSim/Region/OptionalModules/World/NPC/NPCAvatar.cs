@@ -982,22 +982,17 @@ namespace OpenSim.Region.OptionalModules.World.NPC
 
         public void SendObjectPropertiesFamilyData(ISceneEntity Entity, uint RequestFlags)
         {
-
         }
 
         public void SendObjectPropertiesReply(ISceneEntity entity)
         {
         }
 
-        public void SendSunPos(Vector3 sunPos, Vector3 sunVel, ulong time, uint dlen, uint ylen, float phase)
+        public void SendViewerTime(Vector3 sunDir, float sunphase)
         {
         }
 
         public void SendViewerEffect(ViewerEffectPacket.EffectBlock[] effectBlocks)
-        {
-        }
-
-        public void SendViewerTime(int phase)
         {
         }
 

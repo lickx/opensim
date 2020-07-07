@@ -76,7 +76,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             m_OSSL_Functions.osSetEstateSunSettings(sunFixed, sunHour);
         }
 
-        public double osGetCurrentSunHour()
+        public LSL_Float osGetCurrentSunHour()
         {
             return m_OSSL_Functions.osGetCurrentSunHour();
         }
@@ -1480,6 +1480,48 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public LSL_Integer osClearObjectAnimations()
         {
             return m_OSSL_Functions.osClearObjectAnimations();
+        }
+
+        public LSL_Float osGetApparentTime()
+        {
+            return m_OSSL_Functions.osGetApparentTime();
+        }
+
+        public LSL_String osGetApparentTimeString(LSL_Integer format24)
+        {
+            return m_OSSL_Functions.osGetApparentTimeString(format24);
+        }
+
+        public LSL_Float osGetApparentRegionTime()
+        {
+            return m_OSSL_Functions.osGetApparentRegionTime();
+        }
+
+        public LSL_String osGetApparentRegionTimeString(LSL_Integer format24)
+        {
+            return m_OSSL_Functions.osGetApparentRegionTimeString(format24);
+        }
+
+        public LSL_Integer osReplaceAgentEnvironment(LSL_Key agentkey, LSL_Integer transition, LSL_String daycycle)
+        {
+            return m_OSSL_Functions.osReplaceAgentEnvironment(agentkey, transition, daycycle);
+        }
+
+        public LSL_Integer osReplaceParcelEnvironment(LSL_Integer transition, LSL_String daycycle)
+        {
+            return m_OSSL_Functions.osReplaceParcelEnvironment(transition, daycycle);
+        }
+
+        public LSL_Integer osReplaceRegionEnvironment(LSL_Integer transition, LSL_String daycycle,
+           LSL_Float daylen, LSL_Float dayoffset, LSL_Float altitude1, LSL_Float altitude2, LSL_Float altitude3)
+        {
+            return m_OSSL_Functions.osReplaceRegionEnvironment(transition, daycycle, daylen,
+                        dayoffset, altitude1, altitude2, altitude3);
+        }
+
+        public LSL_Integer osResetEnvironment(LSL_Integer parcelOrRegion, LSL_Integer transition)
+        {
+            return m_OSSL_Functions.osResetEnvironment(parcelOrRegion, transition);
         }
     }
 }

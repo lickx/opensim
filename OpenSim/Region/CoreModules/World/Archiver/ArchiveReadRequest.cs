@@ -1039,10 +1039,10 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         private bool LoadRegionSettings(Scene scene, string settingsPath, byte[] data, DearchiveScenesInfo dearchivedScenes)
         {
             RegionSettings loadedRegionSettings;
-
+            ViewerEnvironment regionEnv = null;
             try
             {
-                loadedRegionSettings = RegionSettingsSerializer.Deserialize(data);
+                loadedRegionSettings = RegionSettingsSerializer.Deserialize(data, out regionEnv);
             }
             catch (Exception e)
             {
@@ -1050,6 +1050,13 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                     "[ARCHIVER]: Could not parse region settings file {0}.  Ignoring.  Exception was {1}",
                     settingsPath, e);
                 return false;
+            }
+
+            IEnvironmentModule mEnv = scene.RequestModuleInterface<IEnvironmentModule>();
+            if(mEnv != null)
+            {
+                mEnv.StoreOnRegion(regionEnv);
+                mEnv.WindlightRefresh(0);
             }
 
             RegionSettings currentRegionSettings = scene.RegionInfo.RegionSettings;
@@ -1094,8 +1101,6 @@ namespace OpenSim.Region.CoreModules.World.Archiver
 
             currentRegionSettings.CacheID = UUID.Random();
             currentRegionSettings.Save();
-
-            scene.TriggerEstateSunUpdate();
 
             IEstateModule estateModule = scene.RequestModuleInterface<IEstateModule>();
             if (estateModule != null)

@@ -866,7 +866,9 @@ namespace OpenSim.Region.ClientStack.LindenUDP
                 flags |= RegionFlags.BlockParcelSearch;
             if (Scene.RegionInfo.EstateSettings.DenyMinors)
                 flags |= RegionFlags.DenyAgeUnverified;
-
+            
+            if(Scene.RegionInfo.EstateSettings.AllowEnvironmentOverride)
+                flags |= RegionFlags.AllowEnvironmentOverride;
             return (uint)flags;
         }
 
@@ -3227,84 +3229,21 @@ namespace OpenSim.Region.ClientStack.LindenUDP
             OutPacket(sound, ThrottleOutPacketType.Task);
         }
 
-        public void SendSunPos(Vector3 Position, Vector3 Velocity, ulong CurrentTime, uint SecondsPerSunCycle, uint SecondsPerYear, float OrbitalPosition)
+        public void SendViewerTime(Vector3 sunDir, float sunphase)
         {
-            // Viewers based on the Linden viwer code, do wacky things for oribital positions from Midnight to Sunrise
-            // So adjust for that
-            // Contributed by: Godfrey
-
-            if (OrbitalPosition > m_sunPainDaHalfOrbitalCutoff) // things get weird from midnight to sunrise
-            {
-                OrbitalPosition = (OrbitalPosition - m_sunPainDaHalfOrbitalCutoff) * 0.6666666667f + m_sunPainDaHalfOrbitalCutoff;
-            }
-
             SimulatorViewerTimeMessagePacket viewertime = (SimulatorViewerTimeMessagePacket)PacketPool.Instance.GetPacket(PacketType.SimulatorViewerTimeMessage);
-            viewertime.TimeInfo.SunDirection = Position;
-            viewertime.TimeInfo.SunAngVelocity = Velocity;
 
-            // Sun module used to add 6 hours to adjust for linden sun hour, adding here
-            // to prevent existing code from breaking if it assumed that 6 hours were included.
-            // 21600 == 6 hours * 60 minutes * 60 Seconds
-            viewertime.TimeInfo.UsecSinceStart = CurrentTime + 21600;
+            viewertime.TimeInfo.UsecSinceStart = Util.UnixTimeSinceEpoch_uS();
+            viewertime.TimeInfo.SunDirection = sunDir;
+            viewertime.TimeInfo.SunPhase = sunphase;
 
-            viewertime.TimeInfo.SecPerDay = SecondsPerSunCycle;
-            viewertime.TimeInfo.SecPerYear = SecondsPerYear;
-            viewertime.TimeInfo.SunPhase = OrbitalPosition;
+            viewertime.TimeInfo.SunAngVelocity = Vector3.Zero; //legacy
+            viewertime.TimeInfo.SecPerDay = 14400; // legacy
+            viewertime.TimeInfo.SecPerYear = 158400; // legacy
+
             viewertime.Header.Reliable = false;
             viewertime.Header.Zerocoded = true;
             OutPacket(viewertime, ThrottleOutPacketType.Task);
-        }
-
-        // Currently Deprecated
-        public void SendViewerTime(int phase)
-        {
-            /*
-            Console.WriteLine("SunPhase: {0}", phase);
-            SimulatorViewerTimeMessagePacket viewertime = (SimulatorViewerTimeMessagePacket)PacketPool.Instance.GetPacket(PacketType.SimulatorViewerTimeMessage);
-            //viewertime.TimeInfo.SecPerDay = 86400;
-            //viewertime.TimeInfo.SecPerYear = 31536000;
-            viewertime.TimeInfo.SecPerDay = 1000;
-            viewertime.TimeInfo.SecPerYear = 365000;
-            viewertime.TimeInfo.SunPhase = 1;
-            int sunPhase = (phase + 2) / 2;
-            if ((sunPhase < 6) || (sunPhase > 36))
-            {
-                viewertime.TimeInfo.SunDirection = new Vector3(0f, 0.8f, -0.8f);
-                Console.WriteLine("sending night");
-            }
-            else
-            {
-                if (sunPhase < 12)
-                {
-                    sunPhase = 12;
-                }
-                sunPhase = sunPhase - 12;
-
-                float yValue = 0.1f * (sunPhase);
-                Console.WriteLine("Computed SunPhase: {0}, yValue: {1}", sunPhase, yValue);
-                if (yValue > 1.2f)
-                {
-                    yValue = yValue - 1.2f;
-                }
-
-                yValue = Util.Clip(yValue, 0, 1);
-
-                if (sunPhase < 14)
-                {
-                    yValue = 1 - yValue;
-                }
-                if (sunPhase < 12)
-                {
-                    yValue *= -1;
-                }
-                viewertime.TimeInfo.SunDirection = new Vector3(0f, yValue, 0.3f);
-                Console.WriteLine("sending sun update " + yValue);
-            }
-            viewertime.TimeInfo.SunAngVelocity = new Vector3(0, 0.0f, 10.0f);
-            viewertime.TimeInfo.UsecSinceStart = (ulong)Util.UnixTimeSinceEpoch();
-            viewertime.Header.Reliable = false;
-            OutPacket(viewertime, ThrottleOutPacketType.Task);
-            */
         }
 
         public void SendViewerEffect(ViewerEffectPacket.EffectBlock[] effectBlocks)
@@ -6625,9 +6564,21 @@ namespace OpenSim.Region.ClientStack.LindenUDP
 
             LLSDxmlEncode.AddEndMapAndArray(sb);
 
-            bool allowenvovr = Scene.RegionInfo.EstateSettings.AllowEnviromentOverride;
+            bool allowenvovr = (regionFlags & (uint)RegionFlags.AllowEnvironmentOverride) != 0;
+            int envVersion;
+            if(allowenvovr)
+            {
+                ScenePresence sp = SceneAgent as ScenePresence;
+                if(sp != null && sp.EnvironmentVersion > 0)
+                    envVersion = -1;
+                else
+                    envVersion = landData.EnvironmentVersion;
+            }
+            else
+                envVersion = -1;
+
             LLSDxmlEncode.AddArrayAndMap("ParcelEnvironmentBlock", sb);
-            LLSDxmlEncode.AddElem("ParcelEnvironmentVersion", allowenvovr ? -1: -1, sb);
+            LLSDxmlEncode.AddElem("ParcelEnvironmentVersion", envVersion, sb);
             LLSDxmlEncode.AddElem("RegionAllowEnvironmentOverride", allowenvovr, sb);
             LLSDxmlEncode.AddEndMapAndArray(sb);
 

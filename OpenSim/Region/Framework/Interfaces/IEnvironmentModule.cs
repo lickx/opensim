@@ -32,9 +32,28 @@ namespace OpenSim.Region.Framework.Interfaces
 {
     public interface IEnvironmentModule
     {
+        void StoreOnRegion(ViewerEnvironment VEnv);
         void ResetEnvironmentSettings(UUID regionUUID);
-        //void FromLightShare(RegionLightShareData wl);
-        //RegionLightShareData ToLightShare();
-        //byte[] GetDefaultAssetData(string name);
+        void FromLightShare(RegionLightShareData wl);
+        RegionLightShareData ToLightShare();
+        byte[] GetDefaultAssetData(int type);
+        void WindlightRefresh(int interpolate, bool notforparcel = true);
+        void WindlightRefreshForced(IScenePresence sp, int interpolate);
+
+        ViewerEnvironment GetRegionEnvironment();
+
+        float GetRegionDayFractionTime();
+        int GetRegionDayLength();
+        int GetRegionDayOffset();
+        Vector3 GetRegionSunDir(float altitude);
+        Quaternion GetRegionSunRot(float altitude);
+        Vector3 GetRegionMoonDir(float altitude);
+        Quaternion GetRegionMoonRot(float altitude);
+        int GetDayLength(Vector3 pos);
+        int GetDayOffset(Vector3 pos);
+        Vector3 GetSunDir(Vector3 pos);
+        Quaternion GetSunRot(Vector3 pos);
+        Vector3 GetMoonDir(Vector3 pos);
+        Quaternion GetMoonRot(Vector3 pos);
     }
 }

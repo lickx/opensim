@@ -174,8 +174,8 @@ namespace OpenSim.Region.ClientStack.Linden
             {
                 string estateName = r["estate_name"].AsString();
                 UUID invoice = r["invoice"].AsUUID();
-                int sunHour = r["sun_hour"].AsInteger();
-                bool sunFixed = r["is_sun_fixed"].AsBoolean();
+                //int sunHour = r["sun_hour"].AsInteger();
+                //bool sunFixed = r["is_sun_fixed"].AsBoolean();
                 bool externallyVisible = r["is_externally_visible"].AsBoolean();
                 bool allowDirectTeleport = r["allow_direct_teleport"].AsBoolean();
                 bool denyAnonymous = r["deny_anonymous"].AsBoolean();
@@ -186,13 +186,13 @@ namespace OpenSim.Region.ClientStack.Linden
                 if (r.ContainsKey("override_public_access"))
                     overridePublicAccess = !r["override_public_access"].AsBoolean();
 
-                bool allowEnviromentOverride = m_scene.RegionInfo.EstateSettings.AllowEnviromentOverride;
+                bool allowEnvironmentOverride = m_scene.RegionInfo.EstateSettings.AllowEnvironmentOverride;
                 if (r.ContainsKey("override_environment"))
-                    allowEnviromentOverride = !r["override_environment"].AsBoolean();
+                    allowEnvironmentOverride = !r["override_environment"].AsBoolean();
 
-                ok = m_EstateModule.handleEstateChangeInfoCap(estateName, invoice, sunHour, sunFixed,
+                ok = m_EstateModule.handleEstateChangeInfoCap(estateName, invoice,
                         externallyVisible, allowDirectTeleport, denyAnonymous, denyAgeUnverified,
-                        alloVoiceChat, overridePublicAccess, allowEnviromentOverride);
+                        alloVoiceChat, overridePublicAccess, allowEnvironmentOverride);
             }
             catch
             {

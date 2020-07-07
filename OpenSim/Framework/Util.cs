@@ -1056,9 +1056,22 @@ namespace OpenSim.Framework
             return true;
         }
 
+        public static double UnixTimeSinceEpochSecs()
+        {
+            TimeSpan t = DateTime.UtcNow - UnixEpoch;
+            return t.TotalSeconds;
+        }
+
         public static int UnixTimeSinceEpoch()
         {
-            return ToUnixTime(DateTime.UtcNow);
+            TimeSpan t = DateTime.UtcNow - UnixEpoch;
+            return (int)t.TotalSeconds;
+        }
+
+        public static ulong UnixTimeSinceEpoch_uS()
+        {
+            TimeSpan t = DateTime.UtcNow - UnixEpoch;
+            return (ulong)(t.TotalMilliseconds * 1000);
         }
 
         public static int ToUnixTime(DateTime stamp)
@@ -3368,6 +3381,14 @@ namespace OpenSim.Framework
             return ticks * TimeStampClockPeriodMS;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public static void AddToGatheredIds(Dictionary<UUID, sbyte> uuids, UUID id, sbyte type)
+        {
+            if (id == UUID.Zero)
+                return;
+            uuids[id] = type;
+        }
+
         /// <summary>
         /// Formats a duration (given in milliseconds).
         /// </summary>
@@ -3963,7 +3984,5 @@ namespace OpenSim.Framework
         {
             rng.GetBytes(buff);
         }
-
-
     }
 }

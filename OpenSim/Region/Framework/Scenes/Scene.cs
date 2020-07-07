@@ -2123,17 +2123,17 @@ namespace OpenSim.Region.Framework.Scenes
                 SimulationDataService.StoreBakedTerrain(Bakedmap.GetTerrainData(), RegionInfo.RegionID);
         }
 
-        public void StoreWindlightProfile(RegionLightShareData wl)
+        private ViewerEnvironment m_regionEnvironment;
+        public ViewerEnvironment RegionEnvironment
         {
-            RegionInfo.WindlightSettings = wl;
-            SimulationDataService.StoreRegionWindlightSettings(wl);
-            m_eventManager.TriggerOnSaveNewWindlightProfile();
-        }
-
-        public void LoadWindlightProfile()
-        {
-            RegionInfo.WindlightSettings = SimulationDataService.LoadRegionWindlightSettings(RegionInfo.RegionID);
-            m_eventManager.TriggerOnSaveNewWindlightProfile();
+            get
+            {
+                return m_regionEnvironment;
+            }
+            set
+            {
+                m_regionEnvironment = value;
+            }
         }
 
         /// <summary>
@@ -5884,16 +5884,22 @@ Environment.Exit(1);
             IEstateDataService estateDataService = EstateDataService;
             if (estateDataService != null)
             {
+                bool parcelEnvOvr = RegionInfo.EstateSettings.AllowEnvironmentOverride;
                 RegionInfo.EstateSettings = estateDataService.LoadEstateSettings(RegionInfo.RegionID, false);
-                TriggerEstateSunUpdate();
+                if(parcelEnvOvr && !RegionInfo.EstateSettings.AllowEnvironmentOverride)
+                    ClearAllParcelEnvironments();
             }
         }
 
-        public void TriggerEstateSunUpdate()
+        public void ClearAllParcelEnvironments()
         {
-            EventManager.TriggerEstateToolsSunUpdate(RegionInfo.RegionHandle);
+            IEnvironmentModule envM = RequestModuleInterface<IEnvironmentModule>();
+            if(LandChannel != null && envM != null)
+            {
+                LandChannel.ClearAllEnvironments();
+                envM.WindlightRefresh(1,false);
+            }
         }
-
         private void HandleReloadEstate(string module, string[] cmd)
         {
             if (MainConsole.Instance.ConsoleScene == null ||

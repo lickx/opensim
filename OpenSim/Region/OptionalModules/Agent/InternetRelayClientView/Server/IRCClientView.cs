@@ -1233,22 +1233,14 @@ namespace OpenSim.Region.OptionalModules.Agent.InternetRelayClientView.Server
 
         public void SendDialog(string objectname, UUID objectID, UUID ownerID, string ownerFirstName, string ownerLastName, string msg, UUID textureID, int ch, string[] buttonlabels)
         {
-
         }
 
-        public void SendSunPos(Vector3 sunPos, Vector3 sunVel, ulong CurrentTime, uint SecondsPerSunCycle, uint SecondsPerYear, float OrbitalPosition)
+        public void SendViewerTime(Vector3 sunDir, float sunphase)
         {
-
         }
 
         public void SendViewerEffect(ViewerEffectPacket.EffectBlock[] effectBlocks)
         {
-
-        }
-
-        public void SendViewerTime(int phase)
-        {
-
         }
 
         public void SendAvatarProperties(UUID avatarID, string aboutText, string bornOn, byte[] membershipType, string flAbout, uint flags, UUID flImageID, UUID imageID, string profileURL, UUID partnerID)
