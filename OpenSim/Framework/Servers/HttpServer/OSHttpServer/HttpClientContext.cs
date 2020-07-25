@@ -46,7 +46,7 @@ namespace OSHttpServer
         public int TimeoutRequestReceived = 30000; // 30 seconds
 
         public int TimeoutMaxIdle = 180000; // 3 minutes
-        public int m_TimeoutKeepAlive = 60000;
+        public int m_TimeoutKeepAlive = 30000;
 
         public bool FirstRequestLineReceived;
         public bool FullRequestReceived;
@@ -364,20 +364,18 @@ namespace OSHttpServer
                         continue;
 
                     m_ReceiveBytesLeft += bytesRead;
-                    if (m_ReceiveBytesLeft > m_ReceiveBuffer.Length)
-                        throw new BadRequestException("HTTP header Too large: " + m_ReceiveBytesLeft);
 
                     int offset = m_parser.Parse(m_ReceiveBuffer, 0, m_ReceiveBytesLeft);
                     if (m_stream == null)
                         return; // "Connection: Close" in effect.
 
-                    // try again to see if we can parse another message (check parser to see if it is looking for a new message)
-                    int nextOffset;
-                    int nextBytesleft = m_ReceiveBytesLeft - offset;
-
-                    while (offset != 0 && nextBytesleft > 0)
+                    while (offset != 0)
                     {
-                        nextOffset = m_parser.Parse(m_ReceiveBuffer, offset, nextBytesleft);
+                        int nextBytesleft = m_ReceiveBytesLeft - offset;
+                        if(nextBytesleft <= 0)
+                            break;
+
+                        int nextOffset = m_parser.Parse(m_ReceiveBuffer, offset, nextBytesleft);
 
                         if (m_stream == null)
                             return; // "Connection: Close" in effect.
@@ -386,7 +384,6 @@ namespace OSHttpServer
                             break;
 
                         offset = nextOffset;
-                        nextBytesleft = m_ReceiveBytesLeft - offset;
                     }
 
                     // copy unused bytes to the beginning of the array
@@ -447,7 +444,7 @@ namespace OSHttpServer
             if (m_maxRequests == 0)
                 return;
 
-            if(--m_maxRequests == 0)
+            if (--m_maxRequests == 0)
                 m_currentRequest.Connection = ConnectionType.Close;
 
             if(m_currentRequest.Uri == null)
@@ -519,7 +516,7 @@ namespace OSHttpServer
             ContextTimeoutManager.EnqueueSend(this, m_currentResponse.Priority, notThrottled);
         }
 
-        public async Task EndSendResponse(uint requestID, ConnectionType ctype)
+        public void EndSendResponse(uint requestID, ConnectionType ctype)
         {
             isSendingResponse = false;
             m_currentResponse?.Clear();
@@ -530,8 +527,7 @@ namespace OSHttpServer
             if(contextID < 0)
                 return;
 
-            bool doclose = ctype == ConnectionType.Close;
-            if (doclose)
+            if (ctype == ConnectionType.Close)
             {
                 m_isClosing = true;
                 m_requests.Clear();
@@ -541,30 +537,21 @@ namespace OSHttpServer
             else
             {
                 LastActivityTimeMS = ContextTimeoutManager.EnvironmentTickCount();
-                if (Stream != null && Stream.CanWrite)
-                {
-                    ContextTimeoutManager.ContextEnterActiveSend();
-                    try
-                    {
-                        await Stream.FlushAsync().ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                    };
-                    ContextTimeoutManager.ContextLeaveActiveSend();
-                }
-
                 if (Stream == null || !Stream.CanWrite)
                     return;
 
-                TriggerKeepalive = true;
                 HttpRequest nextRequest = null;
                 lock (m_requestsLock)
                 {
                     if (m_requests != null && m_requests.Count > 0)
                         nextRequest = m_requests.Dequeue();
                     if (nextRequest != null && RequestReceived != null)
+                    {
                         m_waitingResponse = true;
+                        TriggerKeepalive = false;
+                    }
+                    else
+                        TriggerKeepalive = true;
                 }
                 if (nextRequest != null)
                     RequestReceived?.Invoke(this, new RequestEventArgs(nextRequest));

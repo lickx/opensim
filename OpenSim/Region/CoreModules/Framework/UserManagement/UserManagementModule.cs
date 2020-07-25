@@ -206,31 +206,25 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
                         }
                     }
                 }
-
-                // Not found in cache, queue continuation
-                m_ServiceThrottle.Enqueue("uuidname", uuid.ToString(),  delegate
-                {
-                    //m_log.DebugFormat("[YYY]: Name request {0}", uuid);
-
-                    // As least upto September 2013, clients permanently cache UUID -> Name bindings.  Some clients
-                    // appear to clear this when the user asks it to clear the cache, but others may not.
-                    //
-                    // So to avoid clients
-                    // (particularly Hypergrid clients) permanently binding "Unknown User" to a given UUID, we will
-                    // instead drop the request entirely.
-                    if(!client.IsActive)
-                        return;
-                    if (GetUser(uuid, client.ScopeId, out user))
-                    {
-                        if(client.IsActive)
-                            client.SendNameReply(uuid, user.FirstName, user.LastName);
-                    }
-//                    else
-//                        m_log.DebugFormat(
-//                            "[USER MANAGEMENT MODULE]: No bound name for {0} found, ignoring request from {1}",
-//                            uuid, client.Name);
-                });
             }
+
+            if(m_ServiceThrottle == null)
+                return;
+
+            IClientAPI deferedcli = client;
+            // Not found in cache, queue continuation
+            m_ServiceThrottle.Enqueue("uuidname", uuid.ToString(),  delegate
+            {
+                if(deferedcli.IsActive)
+                {
+                    if (GetUser(uuid, deferedcli.ScopeId, out UserData defuser))
+                    {
+                        if(deferedcli.IsActive)
+                            deferedcli.SendNameReply(uuid, defuser.FirstName, defuser.LastName);
+                    }
+                }
+                deferedcli = null;
+            });
         }
 
         public virtual void HandleAvatarPickerRequest(IClientAPI client, UUID avatarID, UUID RequestID, string query)
