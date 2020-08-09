@@ -1756,7 +1756,7 @@ namespace OpenSim.Region.CoreModules.World.Land
                 foreach (SceneObjectGroup obj in primsOverMe)
                 {
                     if(m_scene.Permissions.CanSellObject(previousOwner,obj, (byte)SaleType.Original))
-                        m_BuySellModule.BuyObject(sp.ControllingClient, UUID.Zero, obj.LocalId, 1, 0);
+                        m_BuySellModule.BuyObject(sp.ControllingClient, UUID.Zero, obj.LocalId, (byte)SaleType.Original, 0);
                 }
             }
         }
@@ -1882,7 +1882,21 @@ namespace OpenSim.Region.CoreModules.World.Land
         /// <param name="url"></param>
         public void SetMediaUrl(string url)
         {
-            LandData.MediaURL = url;
+            if (String.IsNullOrWhiteSpace(url))
+                LandData.MediaURL = String.Empty;
+            else
+            {
+                try
+                {
+                    Uri dummmy = new Uri(url, UriKind.Absolute);
+                    LandData.MediaURL = url;
+                }
+                catch (Exception e)
+                {
+                    m_log.ErrorFormat("[LAND OBJECT]: SetMediaUrl error: {0}", e.Message);
+                    return;
+                }
+            }
             m_scene.LandChannel.UpdateLandObject(LandData.LocalID, LandData);
             SendLandUpdateToAvatarsOverMe();
         }
@@ -1893,7 +1907,21 @@ namespace OpenSim.Region.CoreModules.World.Land
         /// <param name="url"></param>
         public void SetMusicUrl(string url)
         {
-            LandData.MusicURL = url;
+            if (String.IsNullOrWhiteSpace(url))
+                LandData.MediaURL = String.Empty;
+            else
+            {
+                try
+                {
+                    Uri dummmy = new Uri(url, UriKind.Absolute);
+                    LandData.MediaURL = url;
+                }
+                catch (Exception e)
+                {
+                    m_log.ErrorFormat("[LAND OBJECT]: SetMusicUrl error: {0}", e.Message);
+                    return;
+                }
+            }
             m_scene.LandChannel.UpdateLandObject(LandData.LocalID, LandData);
             SendLandUpdateToAvatarsOverMe();
         }

@@ -1195,10 +1195,6 @@ namespace OpenSim.Data.SQLite
             createCol(prims, "TextureAnimation", typeof(String));
             createCol(prims, "ParticleSystem", typeof(String));
 
-            createCol(prims, "OmegaX", typeof(Double));
-            createCol(prims, "OmegaY", typeof(Double));
-            createCol(prims, "OmegaZ", typeof(Double));
-
             createCol(prims, "CameraEyeOffsetX", typeof(Double));
             createCol(prims, "CameraEyeOffsetY", typeof(Double));
             createCol(prims, "CameraEyeOffsetZ", typeof(Double));
@@ -1707,12 +1703,6 @@ namespace OpenSim.Data.SQLite
             if (!row.IsNull("ParticleSystem"))
                 prim.ParticleSystem = Convert.FromBase64String(row["ParticleSystem"].ToString());
 
-            prim.AngularVelocity = new Vector3(
-                Convert.ToSingle(row["OmegaX"]),
-                Convert.ToSingle(row["OmegaY"]),
-                Convert.ToSingle(row["OmegaZ"])
-                );
-
             prim.SetCameraEyeOffset(new Vector3(
                 Convert.ToSingle(row["CameraEyeOffsetX"]),
                 Convert.ToSingle(row["CameraEyeOffsetY"]),
@@ -2109,10 +2099,6 @@ namespace OpenSim.Data.SQLite
 
             row["TextureAnimation"] = Convert.ToBase64String(prim.TextureAnimation);
             row["ParticleSystem"] = Convert.ToBase64String(prim.ParticleSystem);
-
-            row["OmegaX"] = prim.AngularVelocity.X;
-            row["OmegaY"] = prim.AngularVelocity.Y;
-            row["OmegaZ"] = prim.AngularVelocity.Z;
 
             row["CameraEyeOffsetX"] = prim.GetCameraEyeOffset().X;
             row["CameraEyeOffsetY"] = prim.GetCameraEyeOffset().Y;
