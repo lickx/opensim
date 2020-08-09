@@ -305,13 +305,10 @@ namespace OpenSim
             configSource.AddSwitch("Startup", "console");
             configSource.AddSwitch("Startup", "save_crashes");
             configSource.AddSwitch("Startup", "crash_dir");
-            configSource.AddSwitch("Startup", "PIDFile");
-            configSource.AddSwitch("Startup", "regionload_regionfile");
-            configSource.AddSwitch("Startup", "regionload_regionsdir");
+            configSource.AddSwitch("Startup", "regionfile");
 
             configSource.AddConfig("StandAlone");
             configSource.AddConfig("Network");
-            configSource.AddSwitch("Network", "http_listener_port");
 
             // Check if we're running in the background or not
             bool background = configSource.Configs["Startup"].GetBoolean("background", false);
