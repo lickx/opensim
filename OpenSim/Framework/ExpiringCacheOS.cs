@@ -24,6 +24,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+// this is a lighter alternative to libomv, no sliding option
+
 using System;
 using System.Threading;
 using System.Collections.Generic;
@@ -31,27 +33,30 @@ using Timer = System.Threading.Timer ;
 
 namespace OpenSim.Framework
 {
-    public sealed class ExpiringKey<Tkey1> : IDisposable
+    public sealed class ExpiringCacheOS<TKey1, TValue1> : IDisposable
     {
         private const int MINEXPIRECHECK = 500;
 
         private Timer m_purgeTimer;
         private ReaderWriterLockSlim m_rwLock;
-        private readonly Dictionary<Tkey1, int> m_dictionary;
+        private readonly Dictionary<TKey1, int> m_expireControl;
+        private readonly Dictionary<TKey1, TValue1> m_values;
         private readonly double m_startTS;
         private readonly int m_expire;
 
-        public ExpiringKey()
+        public ExpiringCacheOS()
         {
-            m_dictionary = new Dictionary<Tkey1, int>();
+            m_expireControl = new Dictionary<TKey1, int>();
+            m_values = new Dictionary<TKey1, TValue1>();
             m_rwLock = new ReaderWriterLockSlim();
             m_expire = MINEXPIRECHECK;
             m_startTS = Util.GetTimeStampMS();
         }
 
-        public ExpiringKey(int expireCheckTimeinMS)
+        public ExpiringCacheOS(int expireCheckTimeinMS)
         {
-            m_dictionary = new Dictionary<Tkey1, int>();
+            m_expireControl = new Dictionary<TKey1, int>();
+            m_values = new Dictionary<TKey1, TValue1>();
             m_rwLock = new ReaderWriterLockSlim();
             m_startTS = Util.GetTimeStampMS();
             m_expire = (expireCheckTimeinMS > MINEXPIRECHECK) ? m_expire = expireCheckTimeinMS : MINEXPIRECHECK;
@@ -76,7 +81,7 @@ namespace OpenSim.Framework
             }
         }
 
-        ~ExpiringKey()
+        ~ExpiringCacheOS()
         {
             Dispose(false);
         }
@@ -111,21 +116,24 @@ namespace OpenSim.Framework
                     gotLock = true;
                 }
 
-                if (m_dictionary.Count == 0)
+                if (m_expireControl.Count == 0)
                 {
                     DisposeTimer();
                     return;
                 }
 
-                List<Tkey1> expired = new List<Tkey1>(m_dictionary.Count);
-                foreach(KeyValuePair<Tkey1,int> kvp in m_dictionary)
+                List<TKey1> expired = new List<TKey1>(m_expireControl.Count);
+                foreach(KeyValuePair<TKey1, int> kvp in m_expireControl)
                 {
                     if(kvp.Value < now)
                         expired.Add(kvp.Key);
                 }
-                foreach(Tkey1 key in expired)
-                    m_dictionary.Remove(key);
-                if(m_dictionary.Count == 0)
+                foreach(TKey1 key in expired)
+                {
+                    m_expireControl.Remove(key);
+                    m_values.Remove(key);
+                }
+                if(m_expireControl.Count == 0)
                     DisposeTimer();
                 else
                     m_purgeTimer.Change(m_expire, Timeout.Infinite);
@@ -137,7 +145,13 @@ namespace OpenSim.Framework
             }
         }
 
-        public void Add(Tkey1 key)
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public void AddOrUpdate(TKey1 key, TValue1 val)
+        {
+            Add(key, val);
+        }
+
+        public void Add(TKey1 key, TValue1 val)
         {
             bool gotLock = false;
             int now = (int)(Util.GetTimeStampMS() - m_startTS) + m_expire;
@@ -151,7 +165,8 @@ namespace OpenSim.Framework
                     gotLock = true;
                 }
 
-                m_dictionary[key] = now;
+                m_expireControl[key] = now;
+                m_values[key] = val;
                 CheckTimer();
             }
             finally
@@ -161,7 +176,19 @@ namespace OpenSim.Framework
             }
         }
 
-        public void Add(Tkey1 key, int expireMS)
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public void AddOrUpdate(TKey1 key, TValue1 val, int expireSeconds)
+        {
+            Add(key, val, expireSeconds * 1000);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public void AddOrUpdate(TKey1 key, TValue1 val, double expireSeconds)
+        {
+            Add(key, val, (int)(expireSeconds * 1000));
+        }
+
+        public void Add(TKey1 key, TValue1 val, int expireMS)
         {
             bool gotLock = false;
             expireMS = (expireMS > m_expire) ? expireMS : m_expire;
@@ -176,7 +203,8 @@ namespace OpenSim.Framework
                     gotLock = true;
                 }
 
-                m_dictionary[key] = now;
+                m_expireControl[key] = now;
+                m_values[key] = val;
                 CheckTimer();
             }
             finally
@@ -186,7 +214,7 @@ namespace OpenSim.Framework
             }
         }
 
-        public bool Remove(Tkey1 key)
+        public bool Remove(TKey1 key)
         {
             bool success;
             bool gotLock = false;
@@ -199,8 +227,9 @@ namespace OpenSim.Framework
                     m_rwLock.EnterWriteLock();
                     gotLock = true;
                 }
-                success = m_dictionary.Remove(key);
-                if(m_dictionary.Count == 0)
+                success = m_expireControl.Remove(key);
+                success |= m_values.Remove(key);
+                if(m_expireControl.Count == 0)
                     DisposeTimer();
             }
             finally
@@ -224,8 +253,9 @@ namespace OpenSim.Framework
                     m_rwLock.EnterWriteLock();
                     gotLock = true;
                 }
-                m_dictionary.Clear();
                 DisposeTimer();
+                m_expireControl.Clear();
+                m_values.Clear();
             }
             finally
             {
@@ -236,10 +266,16 @@ namespace OpenSim.Framework
 
         public int Count
         {
-            get { return m_dictionary.Count; }
+            get { return m_expireControl.Count; }
         }
 
-        public bool ContainsKey(Tkey1 key)
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public bool Contains(TKey1 key)
+        {
+            return ContainsKey(key);
+        }
+
+        public bool ContainsKey(TKey1 key)
         {
             bool gotLock = false;
             try
@@ -250,7 +286,7 @@ namespace OpenSim.Framework
                     m_rwLock.EnterReadLock();
                     gotLock = true;
                 }
-                return m_dictionary.ContainsKey(key);
+                return m_expireControl.ContainsKey(key);
             }
             finally
             {
@@ -259,7 +295,7 @@ namespace OpenSim.Framework
             }
         }
 
-        public bool TryGetValue(Tkey1 key, out int value)
+        public bool TryGetValue(TKey1 key, out TValue1 value)
         {
             bool success;
             bool gotLock = false;
@@ -273,7 +309,7 @@ namespace OpenSim.Framework
                     gotLock = true;
                 }
 
-                success = m_dictionary.TryGetValue(key, out value);
+                success = m_values.TryGetValue(key, out value);
             }
             finally
             {
