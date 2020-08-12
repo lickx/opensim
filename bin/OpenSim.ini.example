@@ -424,16 +424,16 @@
     ;; If set to true, then all permissions checks are carried out
     ; serverside_object_permissions = true
 
-	; if next 2 are false, several admin powers are only active if god powers requested on viewer
-	; this reduces mistakes
-	; set both to true to enable previous behaviour
+    ; if next 2 are false, several admin powers are only active if god powers requested on viewer
+    ; this reduces mistakes
+    ; set both to true to enable previous behaviour
     automatic_gods = false
     implicit_gods = false
-	
-	;# {allow_grid_gods} {} {Allow grid gods?} {true false} false
+    
+    ;# {allow_grid_gods} {} {Allow grid gods?} {true false} false
     ;; This allows users with a UserLevel of 200 or more to assume god
     ;; powers in the regions in this simulator.
-	;; if you don't trust grid admins, what are you doing there?
+    ;; if you don't trust grid admins, what are you doing there?
     allow_grid_gods = true
 
     ;; This allows some control over permissions
@@ -455,6 +455,18 @@
     ;; Owners specific avatars by adding them to the Access List of the parcel
     ;; without having to use the Groups feature
     ; simple_build_permissions = false
+
+    ; Hardens permissions regarding selling and 'take copy'
+    ; - Disallow "take copy" of ANY objects and contents that are NOT created
+    ;   by the owner
+    ; - Disallow selling of COPYABLE objects and copyable contents that are NOT
+    ;   created by the owner
+    ; - Keep allowing selling NO-COPY objects and no-copy contents that are NOT
+    ;   created by the owner (gacha's etc)
+    ;harden_permissions = false
+
+    ; Disallow "take copy" of ANY object set as "Allow anyone to take a copy"
+    ;take_copy_restricted = false
 
 
 [Estates]
@@ -945,7 +957,7 @@
     ;; implements non preemptive microthreading, so fixing problems like llSleep or long events handlers
     ;; but those will suffer from timeslicing, so will be slower.
     ;; warning: scripts state is lost on TP or cross to Xengine regions (cars stop, etc)
-	;; ignore its extensions (subset of original XMRengine), those are still undefined.
+    ;; ignore its extensions (subset of original XMRengine), those are still undefined.
     ; Enabled = false
 
 
@@ -1256,5 +1268,5 @@
     ; Include-Architecture = "config-include/GridHypergrid.ini"
 
 [ServerReleaseNotes]
-	;; Comment or set to "" to disable
+    ;; Comment or set to "" to disable
     ServerReleaseNotesURL = "https://github.com/lickx/opensim/wiki"
