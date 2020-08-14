@@ -80,11 +80,8 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
             if (!disposed)
             {
                 disposed = true;
-                if(m_bannedRegionCache != null)
-                {
-                    m_bannedRegionCache.Dispose();
-                    m_bannedRegionCache = null;
-                }
+                m_bannedRegionCache?.Dispose();
+                m_bannedRegionCache = null;
             }
         }
 
@@ -1203,7 +1200,7 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
             agent.SenderWantsToWaitForRoot = true;
 
-            if(!sp.IsInLocalTransit || sp.RegionViewDistance == 0)
+            if(OutSideViewRange)
                 SetNewCallbackURL(agent, sp.Scene.RegionInfo);
 
             // Reset the do not close flag.  This must be done before the destination opens child connections (here
