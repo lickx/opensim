@@ -682,12 +682,6 @@
     ;; building's lights to possibly not be rendered.
     ; DisableFacelights = "false"
 
-    ; Support viewers object cache, default true
-    ; users may need to reduce viewer bandwitdh if some prims or terrain parts fail to rez.
-    ; change to false if you need to use old viewers that do not support this feature
-    ;
-    SupportViewerObjectsCache = false
-
 [ClientStack.LindenCaps]
     ;; For the long list of capabilities, see OpenSimDefaults.ini
     ;; Here are the few ones you may want to change. Possible values
