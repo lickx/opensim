@@ -961,17 +961,17 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_LSL_Functions.llGetUsername(id);
         }
 
-        public LSL_Key llRequestUsername(string id)
+        public LSL_Key llRequestUsername(LSL_Key id)
         {
             return m_LSL_Functions.llRequestUsername(id);
         }
 
-        public LSL_String llGetDisplayName(string id)
+        public LSL_String llGetDisplayName(LSL_Key id)
         {
             return m_LSL_Functions.llGetDisplayName(id);
         }
 
-        public LSL_Key llRequestDisplayName(string id)
+        public LSL_Key llRequestDisplayName(LSL_Key id)
         {
             return m_LSL_Functions.llRequestDisplayName(id);
         }
@@ -1341,7 +1341,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
             return m_LSL_Functions.llRequestAgentData(id, data);
         }
 
-        public LSL_Key llRequestInventoryData(string name)
+        public LSL_Key llRequestInventoryData(LSL_String name)
         {
             return m_LSL_Functions.llRequestInventoryData(name);
         }
