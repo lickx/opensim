@@ -295,6 +295,55 @@ namespace OpenSim.Framework
             }
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public bool Contains(TKey1 key, int expireMS)
+        {
+            return ContainsKey(key, expireMS);
+        }
+
+        public bool ContainsKey(TKey1 key, int expireMS)
+        {
+            bool gotLock = false;
+            try
+            {
+                try { }
+                finally
+                {
+                    m_rwLock.EnterUpgradeableReadLock();
+                    gotLock = true;
+                }
+                if(m_expireControl.ContainsKey(key))
+                {
+                    bool gotWriteLock = false;
+                    try
+                    {
+                        try { }
+                        finally
+                        {
+                            m_rwLock.EnterWriteLock();
+                            gotWriteLock = true;
+                        }
+                        expireMS = (expireMS > m_expire) ? expireMS : m_expire;
+                        int now = (int)(Util.GetTimeStampMS() - m_startTS) + expireMS;
+
+                        m_expireControl[key] = now;
+                        return true;
+                    }
+                    finally
+                    {
+                        if (gotWriteLock)
+                            m_rwLock.ExitWriteLock();
+                    }
+                }
+                return false;
+            }
+            finally
+            {
+                if (gotLock)
+                    m_rwLock.ExitUpgradeableReadLock();
+            }
+        }
+
         public bool TryGetValue(TKey1 key, out TValue1 value)
         {
             bool success;
@@ -319,5 +368,53 @@ namespace OpenSim.Framework
 
             return success;
         }
+
+        public bool TryGetValue(TKey1 key, int expireMS, out TValue1 value)
+        {
+            bool success;
+            bool gotLock = false;
+
+            try
+            {
+                try { }
+                finally
+                {
+                    m_rwLock.EnterUpgradeableReadLock();
+                    gotLock = true;
+                }
+
+                success = m_values.TryGetValue(key, out value);
+                if(success)
+                {
+                    bool gotWriteLock = false;
+                    try
+                    {
+                        try { }
+                        finally
+                        {
+                            m_rwLock.EnterWriteLock();
+                            gotWriteLock = true;
+                        }
+                        expireMS = (expireMS > m_expire) ? expireMS : m_expire;
+                        int now = (int)(Util.GetTimeStampMS() - m_startTS) + expireMS;
+
+                        m_expireControl[key] = now;
+                    }
+                    finally
+                    {
+                        if (gotWriteLock)
+                            m_rwLock.ExitWriteLock();
+                    }
+                }
+            }
+            finally
+            {
+                if (gotLock)
+                    m_rwLock.ExitUpgradeableReadLock();
+            }
+
+            return success;
+        }
+
     }
 }

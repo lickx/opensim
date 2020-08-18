@@ -25,6 +25,25 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+using log4net;
+using Nini.Config;
+using OpenMetaverse;
+using OpenMetaverse.Assets;
+using OpenMetaverse.Packets;
+using OpenMetaverse.Rendering;
+using OpenSim.Framework;
+using OpenSim.Region.CoreModules.World.Land;
+using OpenSim.Region.Framework.Interfaces;
+using OpenSim.Region.Framework.Scenes;
+using OpenSim.Region.Framework.Scenes.Animation;
+using OpenSim.Region.Framework.Scenes.Scripting;
+using OpenSim.Region.Framework.Scenes.Serialization;
+using OpenSim.Region.PhysicsModules.SharedBase;
+using OpenSim.Region.ScriptEngine.Interfaces;
+using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
+using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
+using OpenSim.Services.Interfaces;
+using OpenSim.Services.Connectors.Hypergrid;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -32,42 +51,13 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.Remoting.Lifetime;
 using System.Text;
-using System.Threading;
 using System.Text.RegularExpressions;
-using Nini.Config;
-using log4net;
-using OpenMetaverse;
-using OpenMetaverse.Assets;
-using OpenMetaverse.StructuredData; // LitJson is hidden on this
-using OpenMetaverse.Packets;
-using OpenMetaverse.Rendering;
-using OpenSim;
-using OpenSim.Framework;
-
-using OpenSim.Region.CoreModules;
-using OpenSim.Region.CoreModules.World.Land;
-using OpenSim.Region.CoreModules.World.Terrain;
-using OpenSim.Region.Framework.Interfaces;
-using OpenSim.Region.Framework.Scenes;
-using OpenSim.Region.Framework.Scenes.Serialization;
-using OpenSim.Region.Framework.Scenes.Animation;
-using OpenSim.Region.Framework.Scenes.Scripting;
-using OpenSim.Region.PhysicsModules.SharedBase;
-using OpenSim.Region.ScriptEngine.Shared;
-using OpenSim.Region.ScriptEngine.Shared.Api.Plugins;
-using OpenSim.Region.ScriptEngine.Shared.ScriptBase;
-using OpenSim.Region.ScriptEngine.Interfaces;
-using OpenSim.Region.ScriptEngine.Shared.Api.Interfaces;
-using OpenSim.Services.Interfaces;
-using GridRegion = OpenSim.Services.Interfaces.GridRegion;
-using PresenceInfo = OpenSim.Services.Interfaces.PresenceInfo;
-using PrimType = OpenSim.Region.Framework.Scenes.PrimType;
+using System.Threading;
 using AssetLandmark = OpenSim.Framework.AssetLandmark;
-using RegionFlags = OpenSim.Framework.RegionFlags;
-using RegionInfo = OpenSim.Framework.RegionInfo;
-
+using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 using LSL_Float = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLFloat;
 using LSL_Integer = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLInteger;
 using LSL_Key = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLString;
@@ -75,8 +65,11 @@ using LSL_List = OpenSim.Region.ScriptEngine.Shared.LSL_Types.list;
 using LSL_Rotation = OpenSim.Region.ScriptEngine.Shared.LSL_Types.Quaternion;
 using LSL_String = OpenSim.Region.ScriptEngine.Shared.LSL_Types.LSLString;
 using LSL_Vector = OpenSim.Region.ScriptEngine.Shared.LSL_Types.Vector3;
-using System.Reflection;
 using PermissionMask = OpenSim.Framework.PermissionMask;
+using PresenceInfo = OpenSim.Services.Interfaces.PresenceInfo;
+using PrimType = OpenSim.Region.Framework.Scenes.PrimType;
+using RegionFlags = OpenSim.Framework.RegionFlags;
+using RegionInfo = OpenSim.Framework.RegionInfo;
 
 namespace OpenSim.Region.ScriptEngine.Shared.Api
 {
@@ -2607,7 +2600,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             }
             else
             {
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
             }
         }
 
@@ -4723,7 +4716,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     linknum -= (m_host.ParentGroup.PrimCount) + 1;
 
                     if (linknum < 0)
-                        return UUID.Zero.ToString();
+                        return ScriptBaseClass.NULL_KEY;
 
                     List<ScenePresence> avatars = GetLinkAvatars(ScriptBaseClass.LINK_SET);
                     if (avatars.Count > linknum)
@@ -4731,7 +4724,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         return avatars[linknum].UUID.ToString();
                     }
                 }
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
             }
         }
 
@@ -5718,7 +5711,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             TaskInventoryItem item = m_host.Inventory.GetInventoryItem(name);
 
             if (item == null)
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
 
             if ((item.CurrentPermissions
                  & (uint)(PermissionMask.Copy | PermissionMask.Transfer | PermissionMask.Modify))
@@ -5727,7 +5720,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 return item.AssetID.ToString();
             }
 
-            return UUID.Zero.ToString();
+            return ScriptBaseClass.NULL_KEY;
         }
 
         public void llAllowInventoryDrop(LSL_Integer add)
@@ -5839,7 +5832,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             }
             else
             {
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
             }
         }
 
@@ -6857,7 +6850,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 if (presence != null)
                 {
-                    return presence.ControllingClient.Name;
+                    return presence.Name;
                     //return presence.Name;
                 }
 
@@ -6873,20 +6866,120 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
             m_host.AddScriptLPS(1);
 
+            if(string.IsNullOrWhiteSpace(name))
+                return ScriptBaseClass.NULL_KEY;
+
+            int nc = Util.ParseAvatarName(name, out string firstName, out string lastName, out string server);
+            if (nc < 2)
+                return ScriptBaseClass.NULL_KEY;
+
+            string sname;
+            if (nc == 2)
+                sname = firstName + " " + lastName;
+            else
+                sname = firstName + "." + lastName + " @" + server;
+
             foreach (ScenePresence sp in World.GetScenePresences())
             {
                 if (sp.IsDeleted || sp.IsChildAgent)
                     continue;
-
-                string test = sp.ControllingClient.Name;
-                if (!name.Contains(" "))
-                    test = test.Replace(" ", ".");
-
-                if (String.Compare(name, test, true) == 0)
+                if (String.Compare(sname, sp.Name, true) == 0)
                     return sp.UUID.ToString();
             }
 
-            return UUID.Zero.ToString();
+            return ScriptBaseClass.NULL_KEY;
+        }
+
+        public LSL_Key llRequestUserKey(LSL_String username)
+        {
+            m_host.AddScriptLPS(1);
+
+            if (string.IsNullOrWhiteSpace(username))
+                return ScriptBaseClass.NULL_KEY;
+
+            int nc = Util.ParseAvatarName(username, out string firstName, out string lastName, out string server);
+            if (nc < 2)
+                return ScriptBaseClass.NULL_KEY;
+
+            string sname;
+            if (nc == 2)
+                sname = firstName + " " + lastName;
+            else
+                sname = firstName + "." + lastName + " @" + server;
+
+            foreach (ScenePresence sp in World.GetScenePresences())
+            {
+                if (sp.IsDeleted || sp.IsChildAgent)
+                    continue;
+                if (String.Compare(sname, sp.Name, true) == 0)
+                {
+                    string ftid = m_AsyncCommands.DataserverPlugin.RequestWithImediatePost(m_host.LocalId,
+                                                        m_item.ItemID, sp.UUID.ToString());
+                    return ftid;
+                }
+            }
+
+            Action<string> act = eventID =>
+            {
+                string reply = ScriptBaseClass.NULL_KEY;
+                UUID userID = UUID.Zero;
+                IUserManagement userManager = World.RequestModuleInterface<IUserManagement>();
+                if (nc == 2)
+                {
+                    if (userManager != null)
+                    {
+                        userID = userManager.GetUserIdByName(firstName, lastName);
+                        if (userID != UUID.Zero)
+                            reply = userID.ToString();
+                    }
+                }
+                else
+                {
+                    string url = "http://" + server;
+                    if (Uri.TryCreate(url, UriKind.Absolute, out Uri dummy))
+                    {
+                        bool notfound = true;
+                        if (userManager != null)
+                        {
+                            string hgfirst = firstName + "." + lastName;
+                            string hglast = "@" + server;
+                            userID = userManager.GetUserIdByName(hgfirst, hglast);
+                            if (userID != UUID.Zero)
+                            {
+                                notfound = false;
+                                reply = userID.ToString();
+                            }
+                        }
+
+                        if(notfound)
+                        {
+                            try
+                            {
+                                UserAgentServiceConnector userConnection = new UserAgentServiceConnector(url);
+                                if (userConnection != null)
+                                {
+                                    userID = userConnection.GetUUID(firstName, lastName);
+                                    if (userID != UUID.Zero)
+                                    {
+                                        if (userManager != null)
+                                            userManager.AddUser(userID, firstName, lastName, url);
+                                        reply = userID.ToString();
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                reply = ScriptBaseClass.NULL_KEY;
+                            }
+                        }
+                    }
+                }
+                m_AsyncCommands.DataserverPlugin.DataserverReply(eventID, reply);
+            };
+
+            UUID tid = m_AsyncCommands.DataserverPlugin.RegisterRequest(m_host.LocalId, m_item.ItemID, act);
+            ScriptSleep(m_sleepMsOnRequestAgentData);
+            return tid.ToString();
         }
 
         public void llSetTextureAnim(int mode, int face, int sizex, int sizey, double start, double length, double rate)
@@ -7014,7 +7107,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_host.AddScriptLPS(1);
             ILandObject land = World.LandChannel.GetLandObject((float)pos.x, (float)pos.y);
             if (land == null)
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
             return land.LandData.OwnerID.ToString();
         }
 
@@ -8016,11 +8109,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     linknum == ScriptBaseClass.LINK_ALL_CHILDREN ||
                     linknum == ScriptBaseClass.LINK_ALL_OTHERS ||
                     linknum == 0)
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
 
             List<SceneObjectPart> parts = GetLinkParts(linknum);
             if (parts.Count == 0)
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
             return parts[0].SitTargetAvatar.ToString();
         }
 
@@ -8309,7 +8402,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     {
                         new LSL_Integer(1),
                         new LSL_String(channelID.ToString()),
-                        new LSL_String(UUID.Zero.ToString()),
+                        new LSL_String(ScriptBaseClass.NULL_KEY),
                         new LSL_String(String.Empty),
                         new LSL_Integer(0),
                         new LSL_String(String.Empty)
@@ -11940,7 +12033,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 }
             }
 
-            return UUID.Zero.ToString();
+            return ScriptBaseClass.NULL_KEY;
         }
 
         private void getLSLFaceMaterial(ref LSL_List res, int code, SceneObjectPart part, Primitive.TextureEntryFace texface)
@@ -11986,7 +12079,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             // material not found
             if(code == (int)ScriptBaseClass.PRIM_NORMAL || code == (int)ScriptBaseClass.PRIM_SPECULAR)
             {
-                res.Add(new LSL_String(UUID.Zero.ToString()));
+                res.Add(new LSL_String(ScriptBaseClass.NULL_KEY));
                 res.Add(new LSL_Vector(1.0, 1.0, 0));
                 res.Add(new LSL_Vector(0, 0, 0));
                 res.Add(new LSL_Float(0));
@@ -12972,7 +13065,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_host.AddScriptLPS(1);
             if (m_UrlModule != null)
                 return m_UrlModule.RequestSecureURL(m_ScriptEngine.ScriptModule, m_host, m_item.ItemID, null).ToString();
-            return UUID.Zero.ToString();
+            return ScriptBaseClass.NULL_KEY;
         }
 
         public LSL_Key llRequestSimulatorData(string simulator, int data)
@@ -13014,7 +13107,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                             break;
                         default:
                             ScriptSleep(m_sleepMsOnRequestSimulatorData);
-                            return UUID.Zero.ToString(); // Raise no event
+                            return ScriptBaseClass.NULL_KEY; // Raise no event
                     }
                     string ltid = m_AsyncCommands.DataserverPlugin.RequestWithImediatePost(m_host.LocalId,
                                                                         m_item.ItemID, lreply);
@@ -13083,7 +13176,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             catch(Exception)
             {
                 //m_log.Error("[LSL_API]: llRequestSimulatorData" + e.ToString());
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
             }
         }
 
@@ -13093,7 +13186,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
             if (m_UrlModule != null)
                 return m_UrlModule.RequestURL(m_ScriptEngine.ScriptModule, m_host, m_item.ItemID, null).ToString();
-            return UUID.Zero.ToString();
+            return ScriptBaseClass.NULL_KEY;
         }
 
         public void llForceMouselook(int mouselook)
@@ -14085,7 +14178,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 return "";
 
             if(!httpScriptMod.CheckThrottle(m_host.LocalId, m_host.OwnerID))
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
 
             List<string> param = new List<string>();
             bool  ok;
@@ -14512,10 +14605,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                             ret.Add(new LSL_Key((string)id));
                             break;
                         case ScriptBaseClass.OBJECT_GROUP:
-                            ret.Add(new LSL_String(UUID.Zero.ToString()));
+                            ret.Add(new LSL_String(ScriptBaseClass.NULL_KEY));
                             break;
                         case ScriptBaseClass.OBJECT_CREATOR:
-                            ret.Add(new LSL_Key(UUID.Zero.ToString()));
+                            ret.Add(new LSL_Key(ScriptBaseClass.NULL_KEY));
                             break;
                         // For the following 8 see the Object version below
                         case ScriptBaseClass.OBJECT_RUNNING_SCRIPT_COUNT:
@@ -15034,15 +15127,22 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 // => complain loudly, as specified by the LSL docs
                 Error("llGetNumberOfNotecardLines", "Can't find notecard '" + name + "'");
-                return UUID.Zero.ToString();
+                return ScriptBaseClass.NULL_KEY;
+            }
+
+            if (NotecardCache.IsCached(assetID))
+            {
+                string ftid = m_AsyncCommands.DataserverPlugin.RequestWithImediatePost(m_host.LocalId, m_item.ItemID, NotecardCache.GetLines(assetID).ToString());
+                ScriptSleep(m_sleepMsOnGetNumberOfNotecardLines);
+                return ftid;
             }
 
             Action<string> act = eventID =>
             {
                 if (NotecardCache.IsCached(assetID))
                 {
-                   m_AsyncCommands.DataserverPlugin.DataserverReply(eventID, NotecardCache.GetLines(assetID).ToString());
-                   return;
+                    m_AsyncCommands.DataserverPlugin.DataserverReply(eventID, NotecardCache.GetLines(assetID).ToString());
+                    return;
                 }
 
                 AssetBase a = World.AssetService.Get(assetID.ToString());
@@ -15079,16 +15179,23 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 // => complain loudly, as specified by the LSL docs
                 Error("llGetNotecardLine", "Can't find notecard '" + name + "'");
+                return ScriptBaseClass.NULL_KEY;
+            }
 
-                return UUID.Zero.ToString();
+            if (NotecardCache.IsCached(assetID))
+            {
+                string eid = m_AsyncCommands.DataserverPlugin.RequestWithImediatePost(m_host.LocalId, m_item.ItemID,
+                    NotecardCache.GetLine(assetID, line, m_notecardLineReadCharsMax));
+
+                ScriptSleep(m_sleepMsOnGetNotecardLine);
+                return eid;
             }
 
             Action<string> act = eventID =>
             {
                 if (NotecardCache.IsCached(assetID))
                 {
-                    m_AsyncCommands.DataserverPlugin.DataserverReply(
-                        eventID, NotecardCache.GetLine(assetID, line, m_notecardLineReadCharsMax));
+                    m_AsyncCommands.DataserverPlugin.DataserverReply(eventID, NotecardCache.GetLine(assetID, line, m_notecardLineReadCharsMax));
                     return;
                 }
 
@@ -15266,6 +15373,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             };
 
             UUID rq = m_AsyncCommands.DataserverPlugin.RegisterRequest(m_host.LocalId, m_item.ItemID, act);
+            ScriptSleep(m_sleepMsOnRequestAgentData);
             return rq.ToString();
         }
 
@@ -18494,51 +18602,26 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
     public class NotecardCache
     {
-        protected class Notecard
-        {
-            public string[] text;
-            public DateTime lastRef;
-        }
-
-        private static Dictionary<UUID, Notecard> m_Notecards =
-            new Dictionary<UUID, Notecard>();
+        private static ExpiringCacheOS<UUID, string[]> m_Notecards = new ExpiringCacheOS<UUID, string[]>(30000);
 
         public static void Cache(UUID assetID, byte[] text)
         {
-            CheckCache();
+            if (m_Notecards.ContainsKey(assetID, 30000))
+                return;
 
-            lock (m_Notecards)
-            {
-                if (m_Notecards.ContainsKey(assetID))
-                    return;
-
-                Notecard nc = new Notecard
-                {
-                    lastRef = DateTime.Now,
-                    text = SLUtil.ParseNotecardToArray(text)
-                };
-                m_Notecards[assetID] = nc;
-            }
+            m_Notecards.AddOrUpdate(assetID, SLUtil.ParseNotecardToArray(text), 30);
         }
 
         public static bool IsCached(UUID assetID)
         {
-            lock (m_Notecards)
-            {
-                return m_Notecards.ContainsKey(assetID);
-            }
+            return m_Notecards.ContainsKey(assetID, 30000);
         }
 
         public static int GetLines(UUID assetID)
         {
-            if (!IsCached(assetID))
-                return -1;
-
-            lock (m_Notecards)
-            {
-                m_Notecards[assetID].lastRef = DateTime.Now;
-                return m_Notecards[assetID].text.Length;
-            }
+            if (m_Notecards.TryGetValue(assetID, 30000, out string[] text))
+                return text.Length;
+            return -1;
         }
 
         /// <summary>
@@ -18549,25 +18632,13 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         /// <returns></returns>
         public static string GetLine(UUID assetID, int lineNumber)
         {
-            if (lineNumber < 0)
-                return "";
-
-            string data;
-
-            if (!IsCached(assetID))
-                return "";
-
-            lock (m_Notecards)
+            if (lineNumber >= 0 && m_Notecards.TryGetValue(assetID, 30000, out string[] text))
             {
-                m_Notecards[assetID].lastRef = DateTime.Now;
-
-                if (lineNumber >= m_Notecards[assetID].text.Length)
+                if (lineNumber >= text.Length)
                     return "\n\n\n";
-
-                data = m_Notecards[assetID].text[lineNumber];
-
-                return data;
+                return text[lineNumber];
             }
+            return "";
         }
 
         /// <summary>
@@ -18587,23 +18658,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             string line = GetLine(assetID, lineNumber);
 
             if (line.Length > maxLength)
-                line = line.Substring(0, maxLength);
+                return line.Substring(0, maxLength);
 
             return line;
         }
-
-        public static void CheckCache()
-        {
-            lock (m_Notecards)
-            {
-                foreach (UUID key in new List<UUID>(m_Notecards.Keys))
-                {
-                    Notecard nc = m_Notecards[key];
-                    if (nc.lastRef.AddSeconds(30) < DateTime.Now)
-                        m_Notecards.Remove(key);
-                }
-            }
-        }
-
     }
 }
