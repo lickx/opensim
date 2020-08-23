@@ -1415,71 +1415,226 @@ namespace OpenSim.Region.CoreModules.World.Estate
 
         private void HandleLandStatRequest(int parcelID, uint reportType, uint requestFlags, string filter, IClientAPI remoteClient)
         {
-            if (!Scene.Permissions.CanIssueEstateCommand(remoteClient.AgentId, false))
-                return;
-
-            Dictionary<uint, float> sceneData = null;
-
             if (reportType == 1)
             {
-                sceneData = Scene.PhysicsScene.GetTopColliders();
+                LandCollidersStatRequest(parcelID, requestFlags, filter, remoteClient);
+                return;
             }
-            else if (reportType == 0)
-            {
-                IScriptModule scriptModule = Scene.RequestModuleInterface<IScriptModule>();
 
-                if (scriptModule != null)
-                    sceneData = scriptModule.GetObjectScriptsExecutionTimes();
+            if (reportType != 0)
+                remoteClient.SendLandStatReply(reportType, requestFlags, 0, new LandStatReportItem[0]); ;
+
+            IScriptModule scriptModule = Scene.RequestModuleInterface<IScriptModule>();
+            if (scriptModule == null)
+                remoteClient.SendLandStatReply(reportType, requestFlags, 0, new LandStatReportItem[0]); ;
+
+            ICollection<ScriptTopStatsData>  sceneData = scriptModule.GetTopObjectStats(
+                    0.001f, 1024, out float totaltime, out float totalmemory);
+
+            if(sceneData == null || sceneData.Count == 0)
+                remoteClient.SendLandStatReply(0, requestFlags, 0, new LandStatReportItem[0]);
+
+            IUrlModule urlModule = Scene.RequestModuleInterface<IUrlModule>();
+
+            //reformat the name so we don't have to do it on every item
+            bool hasfilter = false;
+            if ((requestFlags & 0x0c) != 0 && !string.IsNullOrWhiteSpace(filter))
+            {
+                if ((requestFlags & 0x00000002) != 0)
+                {
+                    int indx = filter.IndexOf('.');
+                    if(indx > 0)
+                    {
+                        string tmp = filter.Substring(0, indx);
+                        if(indx < filter.Length - 1)
+                        {
+                            tmp += " " + filter.Substring(indx +1);
+                        }
+                        filter = tmp;
+                    }
+                }
+                filter.Trim();
+                filter = filter.ToLower();
+                hasfilter = filter.Length > 0;
             }
+
+            var sortedSceneData = sceneData.OrderByDescending(e => e.time);
+
+            int items = 0;
+            List<LandStatReportItem> SceneReport = new List<LandStatReportItem>();
+            foreach (var entry in sortedSceneData)
+            {
+                // The object may have been deleted since we received the data.
+                SceneObjectPart sop = Scene.GetSceneObjectPart(entry.localID);
+                if(sop == null)
+                    continue;
+
+                SceneObjectGroup so = sop.ParentGroup;
+                if (so == null || so.IsDeleted || so.inTransit)
+                    continue;
+
+                int urls_used = 0;
+                if (urlModule != null)
+                {
+                    urls_used = urlModule.GetUrlCount(sop.UUID);
+
+                    // Don't show scripts that haven't executed or where execution time is below one microsecond in
+                    // order to produce a more readable report.
+                    // Unless they are using URLs or using 1024 bytes or more.
+                    if (entry.time < 0.001 && entry.memory < 1024 && urls_used == 0)
+                        continue;
+                }
+                else if (entry.time < 0.001 && entry.memory < 1024)
+                        continue;
+
+                ILandObject land = Scene.LandChannel.GetLandObject(so.AbsolutePosition);
+                if((requestFlags & 1) != 0 && land.LandData.LocalID != parcelID)
+                    continue;
+
+                string owner_name = UserManager.GetUserName(so.OwnerID);
+                string task_name = so.Name;
+                string parcel_name = land != null ? land.LandData.Name : "unknown";
+
+                if (hasfilter)
+                {
+                    if ((requestFlags & 0x00000002) != 0)
+                    {
+                        if (!owner_name.ToLower().Contains(filter))
+                            continue;
+                    }
+                    else if ((requestFlags & 0x00000004) != 0)
+                    {
+                        if (!task_name.ToLower().Contains(filter))
+                            continue;
+                    }
+                    else if ((requestFlags & 0x00000008) != 0)
+                    {
+                        if (!parcel_name.ToLower().Contains(filter))
+                            continue;
+                    }
+                }
+
+                LandStatReportItem lsri = new LandStatReportItem()
+                {
+                    LocationX = so.AbsolutePosition.X,
+                    LocationY = so.AbsolutePosition.Y,
+                    LocationZ = so.AbsolutePosition.Z,
+                    Score = entry.time,
+                    TaskID = so.UUID,
+                    TaskLocalID = so.LocalId,
+                    TaskName = task_name,
+                    OwnerName = owner_name,
+                    OwnerID = so.OwnerID,
+                    Bytes = entry.memory,
+                    Urls = urls_used,
+                    Time = Utils.DateTimeToUnixTime(sop.Rezzed),
+                    Parcel = parcel_name
+                };
+
+                items++;
+                SceneReport.Add(lsri);
+
+                if (items >= 100)
+                    break;
+            }
+
+            remoteClient.SendLandStatReply(0, requestFlags, (uint)SceneReport.Count,SceneReport.ToArray());
+        }
+
+        private void LandCollidersStatRequest(int parcelID, uint requestFlags, string filter, IClientAPI remoteClient)
+        {
+            if (!Scene.Permissions.CanIssueEstateCommand(remoteClient.AgentId, false))
+                remoteClient.SendLandStatReply(1, requestFlags, 0, new LandStatReportItem[0]);
+
+            Dictionary<uint, float> sceneData = Scene.PhysicsScene.GetTopColliders();
 
             List<LandStatReportItem> SceneReport = new List<LandStatReportItem>();
             if (sceneData != null)
             {
-                var sortedSceneData
-                    = sceneData.Select(
-                        item => new { Measurement = item.Value, Part = Scene.GetSceneObjectPart(item.Key) });
-
-                sortedSceneData.OrderBy(item => item.Measurement);
+                //reformat the name so we don't have to do it on every item
+                bool hasfilter = false;
+                if ((requestFlags & 0x0c) != 0 && !string.IsNullOrWhiteSpace(filter))
+                {
+                    if ((requestFlags & 0x00000002) != 0)
+                    {
+                        int indx = filter.IndexOf('.');
+                        if (indx > 0)
+                        {
+                            string tmp = filter.Substring(0, indx);
+                            if (indx < filter.Length - 1)
+                            {
+                                tmp += " " + filter.Substring(indx + 1);
+                            }
+                            filter = tmp;
+                        }
+                    }
+                    filter.Trim();
+                    filter = filter.ToLower();
+                    hasfilter = filter.Length > 0;
+                }
 
                 int items = 0;
-
-                foreach (var entry in sortedSceneData)
+                foreach (KeyValuePair<uint,float> kvp in sceneData)
                 {
+                    if (kvp.Value < 0.001)
+                        continue;
+
                     // The object may have been deleted since we received the data.
-                    if (entry.Part == null)
+                    SceneObjectPart sop = Scene.GetSceneObjectPart(kvp.Key);
+                    if(sop == null)
+                        continue;
+
+                    SceneObjectGroup so = sop.ParentGroup;
+                    if (so == null || so.IsDeleted || so.inTransit)
                         continue;
 
                     // Don't show scripts that haven't executed or where execution time is below one microsecond in
                     // order to produce a more readable report.
-                    if (entry.Measurement < 0.001)
+                    // Unless they are using URLs or using 1024 bytes or more.
+
+                    ILandObject land = Scene.LandChannel.GetLandObject(so.AbsolutePosition);
+                    if ((requestFlags & 1) != 0 && land.LandData.LocalID != parcelID)
                         continue;
 
-                    items++;
-                    SceneObjectGroup so = entry.Part.ParentGroup;
+                    string owner_name = UserManager.GetUserName(so.OwnerID);
+                    string task_name = so.Name;
+                    string parcel_name = land != null ? land.LandData.Name : "unknown";
+
+                    if (hasfilter)
+                    {
+                        if ((requestFlags & 0x00000002) != 0)
+                        {
+                            if (!owner_name.ToLower().Contains(filter))
+                                continue;
+                        }
+                        else if ((requestFlags & 0x00000004) != 0)
+                        {
+                            if (!task_name.ToLower().Contains(filter))
+                                continue;
+                        }
+                        else if ((requestFlags & 0x00000008) != 0)
+                        {
+                            if (!parcel_name.ToLower().Contains(filter))
+                                continue;
+                        }
+                    }
 
                     LandStatReportItem lsri = new LandStatReportItem()
                     {
                         LocationX = so.AbsolutePosition.X,
                         LocationY = so.AbsolutePosition.Y,
                         LocationZ = so.AbsolutePosition.Z,
-                        Score = entry.Measurement,
+                        Score = kvp.Value,
                         TaskID = so.UUID,
                         TaskLocalID = so.LocalId,
-                        TaskName = entry.Part.Name,
-                        OwnerName = UserManager.GetUserName(so.OwnerID)
+                        TaskName = task_name,
+                        OwnerName = owner_name,
+                        OwnerID = so.OwnerID,
+                        Time = Utils.DateTimeToUnixTime(sop.Rezzed),
+                        Parcel = parcel_name
                     };
 
-                    if (filter.Length != 0)
-                    {
-                        if ((lsri.OwnerName.Contains(filter) || lsri.TaskName.Contains(filter)))
-                        {
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
-
+                    items++;
                     SceneReport.Add(lsri);
 
                     if (items >= 100)
@@ -1487,7 +1642,7 @@ namespace OpenSim.Region.CoreModules.World.Estate
                 }
             }
 
-            remoteClient.SendLandStatReply(reportType, requestFlags, (uint)SceneReport.Count,SceneReport.ToArray());
+            remoteClient.SendLandStatReply(1, requestFlags, (uint)SceneReport.Count, SceneReport.ToArray());
         }
 
         #endregion
