@@ -3228,7 +3228,7 @@ namespace OpenSim.Region.Framework.Scenes
             if(IsNPC)
             {
                 if (!Flying)
-                    shouldfly = noFly ? false : (pos.Z > terrainHeight + (Appearance.AvatarHeight*2));
+                    shouldfly = noFly ? false : (pos.Z > AbsolutePosition.Z + (Appearance.AvatarHeight*2));
                 LandAtTarget = landAtTarget & shouldfly;
             }
             else
