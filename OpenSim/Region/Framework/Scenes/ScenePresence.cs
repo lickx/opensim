@@ -3228,14 +3228,22 @@ namespace OpenSim.Region.Framework.Scenes
             if(IsNPC)
             {
                 if (!Flying)
-                    shouldfly = noFly ? false : (pos.Z > terrainHeight + Appearance.AvatarHeight);
+                    shouldfly = noFly ? false : (pos.Z > terrainHeight + (Appearance.AvatarHeight*2));
                 LandAtTarget = landAtTarget & shouldfly;
             }
             else
-            {   
-                // we have no control on viewer fly state
-                shouldfly = Flying || (pos.Z > terrainHeight + Appearance.AvatarHeight);
-                LandAtTarget = false;
+            {
+                if (pos.Z < AbsolutePosition.Z)
+                {
+                    shouldfly = false;
+                    LandAtTarget = false;
+                }
+                else
+                {
+                    // we have no control on viewer fly state
+                    shouldfly = Flying || (pos.Z > AbsolutePosition.Z + (Appearance.AvatarHeight*2));
+                    LandAtTarget = false;
+                }
             }
 
             // m_log.DebugFormat("[SCENE PRESENCE]: Local vector to target is {0},[1}", localVectorToTarget3D.X,localVectorToTarget3D.Y);
