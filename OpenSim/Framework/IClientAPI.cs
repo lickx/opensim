@@ -1065,6 +1065,7 @@ namespace OpenSim.Framework
         /// Close this client
         /// </summary>
         void Close();
+        void Disconnect(string reason);
 
         /// <summary>
         /// Close this client
@@ -1209,6 +1210,7 @@ namespace OpenSim.Framework
         void SendInventoryItemCreateUpdate(InventoryItemBase Item, UUID transactionID, uint callbackId);
 
         void SendRemoveInventoryItem(UUID itemID);
+        void SendRemoveInventoryItems(UUID[] items);
 
         void SendTakeControls(int controls, bool passToAgent, bool TakeControls);
 
@@ -1225,6 +1227,7 @@ namespace OpenSim.Framework
         ///
         /// <param name="node"></param>
         void SendBulkUpdateInventory(InventoryNodeBase node, UUID? transactionID = null);
+        void SendBulkUpdateInventory(InventoryFolderBase[] folders, InventoryItemBase[] items);
 
         void SendXferPacket(ulong xferID, uint packet,
                 byte[] XferData, int XferDataOffset, int XferDatapktLen, bool isTaskInventory);
