@@ -226,23 +226,29 @@ namespace OpenSim.Region.CoreModules.Framework.InventoryAccess
                     groupmask = (uint)PermissionMask.AllAndExport;
                     everyonemask = (uint)(PermissionMask.AllAndExport & ~PermissionMask.Modify);                   
                 }
-                if(assetType == (byte)AssetType.Settings)
+                if(assetType == (sbyte)AssetType.Settings)
                 {
-                    if(data == null)
+                    flags = subType;
+                    if (data == null)
                     {
                         IEnvironmentModule envModule = m_Scene.RequestModuleInterface<IEnvironmentModule>();
                         if(envModule == null)
                             return;
-                        data = envModule.GetDefaultAssetData(subType);
-                        if(data == null)
+                        UUID assetID = envModule.GetDefaultAsset(subType);
+                        if(assetID == UUID.Zero)
                         {
                             m_log.ErrorFormat(
                             "[INVENTORY ACCESS MODULE CreateNewInventoryItem]: failed to create default environment setting asset {0} for agent {1}", name, remoteClient.AgentId);
                             return;
                         }
+                        m_Scene.CreateNewInventoryItem(
+                                remoteClient, remoteClient.AgentId.ToString(), string.Empty, folderID,
+                                name, description, flags, callbackID, assetID, (sbyte)AssetType.Settings, invType,
+                                (uint)PermissionMask.AllAndExport, (uint)PermissionMask.AllAndExport,
+                                everyonemask, nextOwnerMask, groupmask,
+                                creationDate, false); // Data from viewer
+                        return;
                     }
-
-                    flags = subType;
                 }
                 else if( assetType == (byte)AssetType.Clothing ||
                          assetType == (byte)AssetType.Bodypart)
