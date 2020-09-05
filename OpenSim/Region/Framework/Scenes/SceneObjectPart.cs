@@ -2710,6 +2710,7 @@ namespace OpenSim.Region.Framework.Scenes
             return false;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private DetectedObject CreateDetObject(SceneObjectPart obj)
         {
             return new DetectedObject()
@@ -2726,6 +2727,7 @@ namespace OpenSim.Region.Framework.Scenes
             };
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private DetectedObject CreateDetObject(ScenePresence av)
         {
             DetectedObject detobj = new DetectedObject()
@@ -2747,6 +2749,7 @@ namespace OpenSim.Region.Framework.Scenes
             return detobj;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private DetectedObject CreateDetObjectForGround()
         {
             return new DetectedObject()
@@ -2979,15 +2982,17 @@ namespace OpenSim.Region.Framework.Scenes
                 if (soundinfolist.Count > 0)
                     CollisionSounds.PartCollisionSound(this, soundinfolist);
             }
-            
+
             EventManager eventmanager = ParentGroup.Scene.EventManager;
+            if ((ScriptEvents & scriptEvents.anyobjcollision) != 0)
+            {
+                SendCollisionEvent(scriptEvents.collision_start, startedColliders, eventmanager.TriggerScriptCollidingStart);
+                if (!VolumeDetectActive)
+                    SendCollisionEvent(scriptEvents.collision  , m_lastColliders , eventmanager.TriggerScriptColliding);
+                SendCollisionEvent(scriptEvents.collision_end  , endedColliders  , eventmanager.TriggerScriptCollidingEnd);
+            }
 
-            SendCollisionEvent(scriptEvents.collision_start, startedColliders, eventmanager.TriggerScriptCollidingStart);
-            if (!VolumeDetectActive)
-                SendCollisionEvent(scriptEvents.collision  , m_lastColliders , eventmanager.TriggerScriptColliding);
-            SendCollisionEvent(scriptEvents.collision_end  , endedColliders  , eventmanager.TriggerScriptCollidingEnd);
-
-            if (!VolumeDetectActive)
+            if (!VolumeDetectActive && (ScriptEvents & scriptEvents.anylandcollision) != 0)
             {
                 if (startLand)
                     SendLandCollisionEvent(scriptEvents.land_collision_start, eventmanager.TriggerScriptLandCollidingStart);
@@ -4069,7 +4074,7 @@ namespace OpenSim.Region.Framework.Scenes
         /// </summary>
         /// <param name="scriptid"></param>
         /// <param name="events"></param>
-        public void SetScriptEvents(UUID scriptid, int events)
+        public void SetScriptEvents(UUID scriptid, ulong events)
         {
             //            m_log.DebugFormat(
             //                "[SCENE OBJECT PART]: Set script events for script with id {0} on {1}/{2} to {3} in {4}",
@@ -4540,7 +4545,8 @@ namespace OpenSim.Region.Framework.Scenes
 
         public void TriggerScriptChangedEvent(Changed val, object data = null)
         {
-            if (ParentGroup != null && ParentGroup.Scene != null)
+            //if (ParentGroup != null && ParentGroup.Scene != null && (ScriptEvents & scriptEvents.changed) != 0)
+            if ((ScriptEvents & scriptEvents.changed) != 0)
                 ParentGroup.Scene.EventManager.TriggerOnScriptChangedEvent(LocalId, (uint)val, data);
         }
 
