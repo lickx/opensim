@@ -1638,7 +1638,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             return GetSunParam(param);
         }
 
-        public double osGetSunParam(string param)
+        public LSL_Float osGetSunParam(LSL_String param)
         {
             CheckThreatLevel();
             return GetSunParam(param);
@@ -1646,15 +1646,25 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
         private double GetSunParam(string param)
         {
-            double value = 0.0;
-
-            ISunModule module = World.RequestModuleInterface<ISunModule>();
-            if (module != null)
+            param = param.ToLower();
+            switch(param)
             {
-                value = module.GetSunParameter(param);
+                case "day_length":
+                    if (m_envModule == null)
+                        return 14400;
+                    return m_envModule.GetDayLength(m_host.AbsolutePosition);
+                case "year_length":
+                    return 365;
+                case "day_night_offset":
+                    return 0;
+                case "update_interval":
+                    return 0.1;
+                case "day_time_sun_hour_scale":
+                    return 1;
+                default:
+                    break;
             }
-
-            return value;
+            return 0;
         }
 
         public void osSunSetParam(string param, double value)
@@ -5882,7 +5892,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 VEnv = parcel.LandData.Environment;
 
             bool changed = false;
-            if (!string.IsNullOrEmpty(daycycle) || !(daycycle == ScriptBaseClass.NULL_KEY))
+            if (!string.IsNullOrEmpty(daycycle) && (daycycle != ScriptBaseClass.NULL_KEY))
             {
 
                 UUID envID = ScriptUtils.GetAssetIdFromKeyOrItemName(m_host, daycycle);
@@ -5927,7 +5937,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             ViewerEnvironment VEnv = m_envModule.GetRegionEnvironment().Clone();
 
             bool changed = false;
-            if (!string.IsNullOrEmpty(daycycle) || !(daycycle == ScriptBaseClass.NULL_KEY))
+            if (!string.IsNullOrEmpty(daycycle) && (daycycle != ScriptBaseClass.NULL_KEY))
             {
 
                 UUID envID = ScriptUtils.GetAssetIdFromKeyOrItemName(m_host, daycycle);
@@ -5955,7 +5965,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             {
                 int ll = VEnv.DayLength;
                 VEnv.DayLength = (int)(daylen * 3600f);
-                changed = ll != VEnv.DayLength;
+                changed |= ll != VEnv.DayLength;
             }
 
             if (dayoffset >= -11.5 && dayoffset <= 11.5)
@@ -5963,8 +5973,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 int lo = VEnv.DayLength;
                 if (dayoffset <= 0)
                     dayoffset+= 24;
-                VEnv.DayLength = (int)(dayoffset * 3600f);
-                changed = lo != VEnv.DayOffset;
+                VEnv.DayOffset = (int)(dayoffset * 3600f);
+                changed |= lo != VEnv.DayOffset;
             }
 
             bool needSort = false;
