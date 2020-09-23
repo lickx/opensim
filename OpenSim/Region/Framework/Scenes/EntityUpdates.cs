@@ -46,40 +46,16 @@ namespace OpenSim.Region.Framework.Scenes
         NoObject = unchecked((byte)~Object)
     }
 
-    public class EntityUpdate : IComparable<EntityUpdate>
+    public class EntityUpdate
     {
-
         // for priority queue
-        private uint m_pqueue;
-        private ulong m_entryorder;
+        public int PriorityQueue;
+        public int PriorityQueueIndex;
+        public ulong EntryOrder;
 
         private ISceneEntity m_entity;
         private PrimUpdateFlags m_flags;
         public ObjectPropertyUpdateFlags m_propsFlags;
-
-        public uint PriorityQueue
-        {
-            get
-            {
-                return m_pqueue;
-            }
-            set
-            {
-                m_pqueue = value;
-            }
-        }
-
-        public ulong EntryOrder
-        {
-            get
-            {
-                return m_entryorder;
-            }
-            set
-            {
-                m_entryorder = value;
-            }
-        }
 
         public ObjectPropertyUpdateFlags PropsFlags
         {
@@ -111,7 +87,8 @@ namespace OpenSim.Region.Framework.Scenes
             set { m_flags = value; }
         }
 
-        public void Update(uint pqueue, ulong entry)
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public void Update(int pqueue, ulong entry)
         {
             if ((m_flags & PrimUpdateFlags.CancelKill) != 0)
             {
@@ -121,35 +98,37 @@ namespace OpenSim.Region.Framework.Scenes
                     m_flags = PrimUpdateFlags.FullUpdatewithAnim;
             }
 
-            m_pqueue = pqueue;
-            m_entryorder = entry;
+            PriorityQueue = pqueue;
+            EntryOrder = entry;
         }
 
-        public void Update(EntityUpdate oldupdate, uint pqueue, ulong entry)
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public void UpdateFromNew(EntityUpdate newupdate, int pqueue)
         {
-            // we are on the new one
-            m_propsFlags |= oldupdate.PropsFlags;
+            m_propsFlags |= newupdate.PropsFlags;
+            PrimUpdateFlags newFlags = newupdate.Flags;
 
-            PrimUpdateFlags updateFlags = oldupdate.Flags;
-            if ((m_flags & PrimUpdateFlags.UpdateProbe) != 0)
-                updateFlags &= ~PrimUpdateFlags.UpdateProbe;
-            if ((m_flags & PrimUpdateFlags.CancelKill) != 0)
+            if ((newFlags & PrimUpdateFlags.UpdateProbe) != 0)
+                m_flags &= ~PrimUpdateFlags.UpdateProbe;
+
+            if ((newFlags & PrimUpdateFlags.CancelKill) != 0)
             {
-                if ((m_flags & PrimUpdateFlags.UpdateProbe) != 0)
+                if ((newFlags & PrimUpdateFlags.UpdateProbe) != 0)
                     m_flags = PrimUpdateFlags.UpdateProbe;
                 else
-                    m_flags = PrimUpdateFlags.FullUpdatewithAnim;
+                    newFlags = PrimUpdateFlags.FullUpdatewithAnim;
             }
             else
-                m_flags |= updateFlags;
+                m_flags |= newFlags;
 
-            m_pqueue = pqueue;
-            m_entryorder = entry;
+            PriorityQueue = pqueue;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public void Free()
         {
             m_entity = null;
+            PriorityQueueIndex = -1;
             EntityUpdatesPool.Free(this);
         }
 
@@ -173,14 +152,7 @@ namespace OpenSim.Region.Framework.Scenes
 
         public override string ToString()
         {
-            return String.Format("[{0},{1},{2}]", m_pqueue, m_entryorder, m_entity.LocalId);
-        }
-
-        public int CompareTo(EntityUpdate other)
-        {
-            // I'm assuming that the root part of an SOG is added to the update queue
-            // before the component parts
-            return Comparer<ulong>.Default.Compare(this.EntryOrder, other.EntryOrder);
+            return String.Format("[{0},{1},{2}]", PriorityQueue, EntryOrder, m_entity.LocalId);
         }
     }
 
