@@ -125,9 +125,6 @@ namespace OpenSim.Framework
 
         public bool ResolveDNS()
         {
-            if (URLType == UriHostNameType.Unknown || String.IsNullOrWhiteSpace(Host))
-                return false;
-
             IPAddress ip = Util.GetHostFromDNS(Host);
             if (ip == null)
                 return false;
@@ -174,15 +171,16 @@ namespace OpenSim.Framework
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
+        private bool m_hasHGconfig;
         private OSHostURL m_gateKeeperURL;
         private HashSet<OSHostURL> m_gateKeeperAlias;
 
         private OSHostURL m_homeURL;
         private HashSet<OSHostURL> m_homeURLAlias;
 
-        public GridInfo (IConfigSource config, string defaultHost = "")
+        public GridInfo (IConfigSource config, string defaultURI = "")
         {
-            string[] sections = new string[] { "Startup", "Hypergrid", "UserAgentService" };
+            string[] sections = new string[] { "Startup", "Hypergrid"};
 
             string gatekeeper = Util.GetConfigVarFromSections<string>(config, "GatekeeperURI", sections, String.Empty);
             if (string.IsNullOrEmpty(gatekeeper))
@@ -199,13 +197,17 @@ namespace OpenSim.Framework
             }
             if (string.IsNullOrEmpty(gatekeeper))
             {
-                if(!string.IsNullOrEmpty(defaultHost))
-                    m_gateKeeperURL = new OSHostURL(defaultHost, true);
+                m_hasHGconfig = false;
+                if (!string.IsNullOrEmpty(defaultURI))
+                    m_gateKeeperURL = new OSHostURL(defaultURI, true);
             }
             else
+            {
                 m_gateKeeperURL = new OSHostURL(gatekeeper, true);
+                m_hasHGconfig = true;
+            }
 
-            if(m_gateKeeperURL.URLType == UriHostNameType.Unknown)
+            if (m_gateKeeperURL.URLType == UriHostNameType.Unknown)
                 throw new Exception(String.Format("could not find gatekeeper URL"));
             if (m_gateKeeperURL.IP == null)
                 throw new Exception(String.Format("could not resolve gatekeeper hostname"));
@@ -233,8 +235,8 @@ namespace OpenSim.Framework
             {
                 if (!string.IsNullOrEmpty(gatekeeper))
                     m_homeURL = m_gateKeeperURL;
-                else if (!string.IsNullOrEmpty(defaultHost))
-                    m_homeURL = new OSHostURL(defaultHost, true);
+                else if (!string.IsNullOrEmpty(defaultURI))
+                    m_homeURL = new OSHostURL(defaultURI, true);
             }
             else
                 m_homeURL = new OSHostURL(home, true);
@@ -261,13 +263,51 @@ namespace OpenSim.Framework
             }
         }
 
+        public bool HasHGConfig
+        {
+            get
+            {
+                return m_hasHGconfig;
+            }
+        }
+
         public string GateKeeperURL
         {
             get
             {
-                if(m_gateKeeperURL.URLType != UriHostNameType.Unknown)
+                if (m_gateKeeperURL.URLType != UriHostNameType.Unknown)
                     return m_gateKeeperURL.URL;
-                return null;
+                return string.Empty;
+            }
+        }
+
+        public string GateKeeperURLNoEndSlash
+        {
+            get
+            {
+                if (m_gateKeeperURL.URLType != UriHostNameType.Unknown)
+                    return m_gateKeeperURL.URL.Substring(0, m_gateKeeperURL.URL.Length - 1);
+                return string.Empty;
+            }
+        }
+
+        public string HGGateKeeperURL
+        {
+            get
+            {
+                if (m_gateKeeperURL.URLType != UriHostNameType.Unknown && m_hasHGconfig)
+                    return m_gateKeeperURL.URL;
+                return string.Empty;
+            }
+        }
+
+        public string HGGateKeeperURLNoEndSlash
+        {
+            get
+            {
+                if (m_gateKeeperURL.URLType != UriHostNameType.Unknown && m_hasHGconfig)
+                    return m_gateKeeperURL.URL.Substring(0, m_gateKeeperURL.URL.Length - 1);
+                return string.Empty;
             }
         }
 
@@ -281,7 +321,21 @@ namespace OpenSim.Framework
             }
         }
 
-        public int IsLocalGrid(string gatekeeper)
+        public string HomeURLNoEndSlash
+        {
+            get
+            {
+                if (m_homeURL.URLType != UriHostNameType.Unknown)
+                    return m_homeURL.URL.Substring(0, m_gateKeeperURL.URL.Length - 1);
+                return null;
+            }
+        }
+
+        // -2 dns failed
+        // -1 if bad url
+        // 0 if not local
+        // 1 if local
+        public int IsLocalGrid(string gatekeeper, bool withResolveCheck = false)
         {
             OSHostURL tmp = new OSHostURL(gatekeeper, false);
             if(tmp.URLType == UriHostNameType.Unknown)
@@ -290,6 +344,10 @@ namespace OpenSim.Framework
                 return 1;
             if (m_gateKeeperAlias != null && m_gateKeeperAlias.Contains(tmp))
                 return 1;
+            if (withResolveCheck)
+            {
+                return tmp.ResolveDNS() ? 0 : -2;
+            }
             return 0;
         }
 
@@ -304,6 +362,5 @@ namespace OpenSim.Framework
                 return 1;
             return 0;
         }
-
     }
 }
