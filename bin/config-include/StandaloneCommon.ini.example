@@ -36,7 +36,7 @@
     ;ConnectionString = "Server=localhost;Database=opensim;User Id=opensim; password=***;"
 
 [Hypergrid]
-    ; Uncomment the variable GatekeeperURI only if you are in
+    ; Uncomment the variable GatekeeperURI to enable 
     ; Hypergrid configuration. Otherwise, ignore.
 
     ;# {GatekeeperURI} {Hypergrid} {The URL of the gatekeeper of this world} {}
@@ -47,10 +47,10 @@
     ;; This is a default that can be overwritten in some sections.
     ; GatekeeperURI = "${Const|BaseURL}:${Const|PublicPort}"
 
-    # {GatekeeperURIAlias} {Hypergrid} {Old hostnames, FQDN or ips of the gatekeeper of this world} {}
-    ;; comma separated list, and port (default 80 or 443)
+    ;# {GatekeeperURIAlias} {Hypergrid} {Old hostnames (FQDN), or IPs of the gatekeeper of this world and port (default 80 or 443)} {}
+    ;; comma separated list, 
     ;; in case there was for example a dns change, etc
-    ; GatekeeperURIAlias = myoldname.something.org, 127.0.0.1,127.0.1:8043
+    ; GatekeeperURIAlias = myoldname.something.org, 127.0.0.1,127.0.0.1:8043
 
     ;# {HomeURI} {Hypergrid} {The Home URL of this world} {}
     ;; If this is a standalone world, this is the address of this instance.
@@ -60,10 +60,10 @@
     ;; This is a default that can be overwritten in some sections.
     HomeURI = "${Const|BaseURL}:${Const|PublicPort}"
 
-    # {HomeURIAlias} {Hypergrid} {Old hostnames, FQDN or ips of the gatekeeper of this world} {}
-    ;; comma separated list, and port (default 80 or 443)
+    ;# {HomeURIAlias} {Hypergrid} {Old hostnames (FQDN), or IPs of the gatekeeper of this world and port (default 80 or 443)} {}
+    ;; comma separated list, 
     ;; in case there was for example a dns change, etc
-    ; HomeURIAlias = myoldname.something.org, 127.0.0.1,127.0.1:8043	
+    ; HomeURIAlias = myoldname.something.org, 127.0.0.1,127.0.0.1:8043	
 
 [Modules]
     ;; Choose one cache module and the corresponding config file, if it exists.
@@ -118,9 +118,6 @@
     ;; Set to false to prevent export
     ExportSupported = true
 
-    ; === HG ONLY ===
-    ;; If you have this set under [Hypergrid], no need to set it here, leave it commented
-    ; GatekeeperURI="${Const|BaseURL}:${Const|PublicPort}"
 
 [LibraryModule]
     ; Set this if you want to change the name of the OpenSim Library
@@ -128,8 +125,6 @@
 
 [LoginService]
     WelcomeMessage = "Welcome, Avatar!"
-    ;; If you have Gatekeeper set under [Hypergrid], no need to set it here, leave it commented
-    ; GatekeeperURI = "${Const|BaseURL}:${Const|PublicPort}"
 
     SRV_HomeURI = "${Hypergrid|HomeURI}"
     SRV_InventoryServerURI = "${Const|BaseURL}:${Const|PublicPort}"
@@ -369,9 +364,7 @@
     ;LevelHGFriends = 0;
 
 [Messaging]
-    ; === HG ONLY ===
-    ;; If you have this set under [Hypergrid], no need to set it here, leave it commented
-    ; GatekeeperURI = "${Const|BaseURL}:${Const|PublicPort}"
+
 
 [EntityTransfer]
     ;; User level from which local users are allowed to HG teleport. Default 0 (all users)
