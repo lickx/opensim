@@ -83,7 +83,6 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
             public int reqtype;
         }
 
-        //private ConcurrentQueue<AsyncPropsRequest> m_asyncRequests = new ConcurrentQueue<AsyncPropsRequest>();
         private ConcurrentStack<AsyncPropsRequest> m_asyncRequests = new ConcurrentStack<AsyncPropsRequest>();
         private object m_asyncRequestsLock = new object();
         private bool m_asyncRequestsRunning = false;
@@ -92,7 +91,6 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
         {
             lock(m_asyncRequestsLock)
             {
-                //while(m_asyncRequests.TryDequeue(out AsyncPropsRequest req))
                 while (m_asyncRequests.TryPop(out AsyncPropsRequest req))
                 {
                     try
@@ -214,8 +212,9 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
                     }
                     catch (Exception e)
                     {
-                        m_log.ErrorFormat("[ProfileModule]: Process fail {0} : {1}", e.Message, e.StackTrace);
+                        m_log.ErrorFormat("[UserProfileModule]: Process fail {0} : {1}", e.Message, e.StackTrace);
                     }
+
                 }
                 m_asyncRequestsRunning = false;
             }
@@ -301,17 +300,19 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
             // If we find ProfileURL then we configure for FULL support
             // else we setup for BASIC support
             ProfileServerUri = profileConfig.GetString("ProfileServiceURL", "");
-            OSHostURL tmp = new OSHostURL(ProfileServerUri, true);
-            if(tmp.IP == null)
+
+            OSHTTPURI tmp = new OSHTTPURI(ProfileServerUri, true);
+            if (!tmp.IsResolvedHost)
             {
-                m_log.Debug("[PROFILES]: Fail to resolve [UserProfiles] ProfileServiceURL. UserProfiles disabled");
-                Enabled = false;
-                return;
+                m_log.ErrorFormat("[UserProfileModule: {0}", tmp.IsValidHost ?  "Could not resolve ProfileServiceURL" : "ProfileServiceURL is a invalid host");
+                throw new Exception("UserProfileModule init error");
             }
+
+            ProfileServerUri = tmp.URI;
 
             m_allowUserProfileWebURLs = profileConfig.GetBoolean("AllowUserProfileWebURLs", m_allowUserProfileWebURLs);
 
-            m_log.Debug("[PROFILES]: Full Profiles Enabled");
+            m_log.Debug("[UserProfileModule]: Full Profiles Enabled");
             ReplaceableInterface = null;
             Enabled = true;
         }
@@ -1554,8 +1555,8 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
             req.agent = avatarID;
             req.reqtype = 0;
 
-            //m_asyncRequests.Enqueue(req);
             m_asyncRequests.Push(req);
+
             if (Monitor.TryEnter(m_asyncRequestsLock))
             {
                 if (!m_asyncRequestsRunning)
@@ -1564,7 +1565,6 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
                     Util.FireAndForget(x => ProcessRequests());
                 }
                 Monitor.Exit(m_asyncRequestsLock);
-
             }
 
             /*
@@ -1688,7 +1688,6 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
         {
             if (remoteClient.AgentId == newProfile.ID)
             {
-
                 UserProfileProperties prop = new UserProfileProperties();
 
                 prop.UserId = remoteClient.AgentId;
@@ -1862,10 +1861,7 @@ namespace OpenSim.Region.CoreModules.Avatar.UserProfiles
         /// </param>
         bool GetUserProfileServerURI(UUID userID, out string serverURI)
         {
-            bool local;
-            local = UserManagementModule.IsLocalGridUser(userID);
-
-            if (!local)
+            if (!UserManagementModule.IsLocalGridUser(userID))
             {
                 serverURI = UserManagementModule.GetUserServerURL(userID, "ProfileServerURI", out bool failed);
                 if(failed)
