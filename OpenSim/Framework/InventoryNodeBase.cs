@@ -40,8 +40,8 @@ namespace OpenSim.Framework
 
         public virtual string Name
         {
-            get { return UTF8Name.ToString(); }
-            set { UTF8Name = new osUTF8(value); }
+            get { return UTF8Name == null ? string.Empty : UTF8Name.ToString(); }
+            set { UTF8Name = string.IsNullOrEmpty(value) ? null : new osUTF8(value); }
         }
         public osUTF8 UTF8Name;
 
