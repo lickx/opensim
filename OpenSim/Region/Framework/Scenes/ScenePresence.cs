@@ -6482,8 +6482,6 @@ namespace OpenSim.Region.Framework.Scenes
                         positionChanged = true;
                     }
                 }
-
-                land.SendLandUpdateToClient(ControllingClient);
             }
 
             return true;
