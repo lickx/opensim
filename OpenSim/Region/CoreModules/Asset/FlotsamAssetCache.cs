@@ -166,7 +166,6 @@ namespace OpenSim.Region.CoreModules.Asset
 
                         m_negativeCacheEnabled = assetConfig.GetBoolean("NegativeCacheEnabled", m_negativeCacheEnabled);
                         m_negativeExpiration = assetConfig.GetInt("NegativeCacheTimeout", m_negativeExpiration);
-                        
 
                         m_updateFileTimeOnCacheHit = assetConfig.GetBoolean("UpdateFileTimeOnCacheHit", m_updateFileTimeOnCacheHit);
                         m_updateFileTimeOnCacheHit &= m_FileCacheEnabled;
@@ -563,6 +562,11 @@ namespace OpenSim.Region.CoreModules.Asset
             return asset;
         }
 
+        public AssetBase Get(string id, string ForeignAssetService, bool dummy)
+        {
+            return null;
+        }
+
         public bool Get(string id, out AssetBase asset)
         {
             asset = null;
@@ -626,9 +630,51 @@ namespace OpenSim.Region.CoreModules.Asset
             return false;
         }
 
+        // does not check negative cache
         public AssetBase GetCached(string id)
         {
-            Get(id, out AssetBase asset);
+            AssetBase asset = null;
+
+            m_Requests++;
+
+            asset = GetFromWeakReference(id);
+            if (asset != null)
+            {
+                if (m_updateFileTimeOnCacheHit)
+                {
+                    string filename = GetFileName(id);
+                    UpdateFileLastAccessTime(filename);
+                }
+                if (m_MemoryCacheEnabled)
+                    UpdateMemoryCache(id, asset);
+                return asset;
+            }
+
+            if (m_MemoryCacheEnabled)
+            {
+                asset = GetFromMemoryCache(id);
+                if (asset != null)
+                {
+                    UpdateWeakReference(id, asset);
+                    if (m_updateFileTimeOnCacheHit)
+                    {
+                        string filename = GetFileName(id);
+                        UpdateFileLastAccessTime(filename);
+                    }
+                    return asset;
+                }
+            }
+
+            if (m_FileCacheEnabled)
+            {
+                asset = GetFromFileCache(id);
+                if (asset != null)
+                {
+                    UpdateWeakReference(id, asset);
+                    if (m_MemoryCacheEnabled)
+                        UpdateMemoryCache(id, asset);
+                }
+            }
             return asset;
         }
 
