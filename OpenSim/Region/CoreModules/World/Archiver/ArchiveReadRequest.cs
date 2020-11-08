@@ -221,7 +221,8 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             m_rotation = options.ContainsKey("rotation") ? (float)options["rotation"] : 0f;
 
             m_boundingOrigin = Vector3.Zero;
-            m_boundingSize = new Vector3(scene.RegionInfo.RegionSizeX, scene.RegionInfo.RegionSizeY, float.MaxValue);
+            m_boundingOrigin.Z = Constants.MinSimulationHeight;
+            m_boundingSize = new Vector3(scene.RegionInfo.RegionSizeX, scene.RegionInfo.RegionSizeY, Constants.MaxSimulationHeight - Constants.MinSimulationHeight);
 
             if (options.ContainsKey("bounding-origin"))
             {
@@ -437,9 +438,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             {
                 WorkManager.RunInThread(o =>
                 {
-                    Thread.Sleep(15000);
                     m_log.Info("[ARCHIVER]: Starting scripts in scene objects...");
-
                     foreach (DearchiveContext sceneContext in sceneContexts.Values)
                     {
                         foreach (SceneObjectGroup sceneObject in sceneContext.SceneObjects)
@@ -605,6 +604,13 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                     if (m_displacement != Vector3.Zero)
                     {
                         pos += m_displacement;
+                        if (pos.X < 0 || pos.X >= scene.RegionInfo.RegionSizeX
+                            || pos.Y < 0 || pos.Y >= scene.RegionInfo.RegionSizeY
+                            || pos.Z < Constants.MinSimulationHeight || pos.Z > Constants.MaxSimulationHeight)
+                        {
+                            if (m_debug) m_log.DebugFormat("[ARCHIVER]: Skipping object from OAR After displacement clip {0}.", pos.ToString());
+                            continue;
+                        }
                         if (m_debug) m_log.DebugFormat("[ARCHIVER]: After displacement, object from OAR is at scene position {0}.", pos.ToString());
                     }
                     sceneObject.AbsolutePosition = pos;
@@ -632,8 +638,10 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 if (scene.AddRestoredSceneObject(sceneObject, true, false))
                 {
                     sceneObjectsLoadedCount++;
-                    sceneObject.CreateScriptInstances(0, false, scene.DefaultScriptEngine, 0);
-                    sceneObject.ResumeScripts();
+                    sceneObjects.Add(sceneObject);
+
+                    //sceneObject.CreateScriptInstances(0, false, scene.DefaultScriptEngine, 0);
+                    //sceneObject.ResumeScripts();
                 }
             }
 
