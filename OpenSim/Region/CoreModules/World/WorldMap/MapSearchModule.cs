@@ -141,7 +141,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                     if (mapName.Length < 3 || (mapName.EndsWith("#") && mapName.Length < 4))
                     {
                         // final block, closing the search result
-                        AddFinalBlock(blocks,mapName);
+                        AddFinalBlock(blocks, mapName);
 
                         // flags are agent flags sent from the viewer.
                         // they have different values depending on different viewers, apparently
@@ -151,39 +151,12 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                     }
 
                     //m_log.DebugFormat("MAP NAME=({0})", mapName);
-
-                    // Hack to get around the fact that ll V3 now drops the port from the
-                    // map name. See https://jira.secondlife.com/browse/VWR-28570
-                    //
-                    // Caller, use this magic form instead:
-                    // secondlife://http|!!mygrid.com|8002|Region+Name/128/128
-                    // or url encode if possible.
-                    // the hacks we do with this viewer...
-                    //
-                    bool needOriginalName = false;
                     string mapNameOrig = mapName;
-                    if (mapName.Contains("|"))
-                    {
-                        mapName = mapName.Replace('|', ':');
-                        needOriginalName = true;
-                    }
-                    if (mapName.Contains("+"))
-                    {
-                        mapName = mapName.Replace('+', ' ');
-                        needOriginalName = true;
-                    }
-                    if (mapName.Contains("!"))
-                    {
-                        mapName = mapName.Replace('!', '/');
-                        needOriginalName = true;
-                    }
-                    if (mapName.Contains("."))
-                        needOriginalName = true;
+                    int indx = mapName.IndexOfAny(new char[] {'.', '!','+','|',':','%'});
+                    bool needOriginalName = indx >= 0;
 
                     // try to fetch from GridServer
                     List<GridRegion> regionInfos = m_scene.GridService.GetRegionsByName(m_scene.RegionInfo.ScopeID, mapName, 20);
-        //            if (regionInfos.Count == 0)
-        //                remoteClient.SendAlertMessage("Hyperlink could not be established.");
 
                     //m_log.DebugFormat("[MAPSEARCHMODULE]: search {0} returned {1} regions", mapName, regionInfos.Count);
 
@@ -198,14 +171,14 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                             MapBlockData block = new MapBlockData();
                             WorldMap.MapBlockFromGridRegion(block, info, flags);
 
-                            if (flags == 2 &&  regionInfos.Count == 1 && needOriginalName)
-                                    block.Name = mapNameOrig;
+                            if (needOriginalName && flags == 2 &&  regionInfos.Count == 1)
+                                block.Name = mapNameOrig;
                             blocks.Add(block);
                         }
                     }
 
                     // final block, closing the search result
-                    AddFinalBlock(blocks,mapNameOrig);
+                    AddFinalBlock(blocks, mapNameOrig);
 
                     // flags are agent flags sent from the viewer.
                     // they have different values depending on different viewers, apparently
