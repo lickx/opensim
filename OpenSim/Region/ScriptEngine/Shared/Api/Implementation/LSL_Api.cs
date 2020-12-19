@@ -13227,6 +13227,24 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public void llLoadURL(string avatar_id, string message, string url)
         {
             m_host.AddScriptLPS(1);
+            if(m_host.OwnerID == m_host.GroupID)
+                return;
+            try
+            {
+                Uri m_checkuri = new Uri(url);
+                if (m_checkuri.Scheme != Uri.UriSchemeHttp && m_checkuri.Scheme != Uri.UriSchemeHttps)
+                {
+                    Error("llLoadURL","Invalid url schema");
+                    ScriptSleep(200);
+                    return;
+                }
+            }
+            catch
+            {
+                Error("llLoadURL","Invalid url");
+                ScriptSleep(200);
+                return;
+            }
 
             IDialogModule dm = World.RequestModuleInterface<IDialogModule>();
             if (null != dm)
@@ -13560,7 +13578,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         public LSL_Integer llModPow(int a, int b, int c)
         {
             m_host.AddScriptLPS(1);
-            Math.DivRem(Convert.ToInt64(Math.Pow(a, b)), c, out long tmp);
+            Math.DivRem((long)Math.Pow(a, b), c, out long tmp);
             ScriptSleep(m_sleepMsOnModPow);
             return (int)tmp;
         }
@@ -14247,11 +14265,27 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_host.AddScriptLPS(1);
             IHttpRequestModule httpScriptMod = m_ScriptEngine.World.RequestModuleInterface<IHttpRequestModule>();
             if(httpScriptMod == null)
-                return "";
+                return string.Empty;
 
             if(!httpScriptMod.CheckThrottle(m_host.LocalId, m_host.OwnerID))
                 return ScriptBaseClass.NULL_KEY;
 
+            try
+            {
+                Uri m_checkuri = new Uri(url);
+                if (m_checkuri.Scheme != Uri.UriSchemeHttp && m_checkuri.Scheme != Uri.UriSchemeHttps)
+                {
+                    Error("llHTTPRequest", "Invalid url schema");
+                    ScriptSleep(200);
+                    return string.Empty;
+                }
+            }
+            catch
+            {
+                Error("llHTTPRequest", "Invalid url");
+                ScriptSleep(200);
+                return string.Empty;
+            }
             List<string> param = new List<string>();
             bool  ok;
             int nCustomHeaders = 0;
