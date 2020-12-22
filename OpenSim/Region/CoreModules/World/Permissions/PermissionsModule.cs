@@ -2089,12 +2089,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             DebugPermissionInformation(MethodInfo.GetCurrentMethod().Name);
             if (m_bypassPermissions) return m_bypassPermissionsValue;
 
-            if (m_takeCopyRestricted && sp.UUID != sog.OwnerID) {
-                sp.ControllingClient.SendAgentAlertMessage("'Take copy' is disabled in this sim", false);
-                return false;
-            }
-
-            if (sog == null || sog.IsDeleted || sp == null || sp.IsDeleted)
+             if (sog == null || sog.IsDeleted || sp == null || sp.IsDeleted)
                 return false;
 
             // refuse on attachments
@@ -2107,26 +2102,35 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 //sp.ControllingClient.SendAgentAlertMessage("Copying this item has been denied by the permissions system", false);
                 return false;
             }
-
-            if(sog.OwnerID != sp.UUID && (perms & (uint)PermissionMask.Transfer) == 0)
+            
+            if (sog.OwnerID != sp.UUID && (perms & (uint)PermissionMask.Transfer) == 0)
                  return false;
 
-            if (m_hardenPermissions && sp.UUID != sog.OwnerID)
+            if (sp.UUID != sog.OwnerID && IsFriendWithPerms(sp.UUID, sog.OwnerID) == false)
             {
-                if (sog.OwnerID != sog.RootPart.CreatorID)
+                if (m_takeCopyRestricted)
                 {
-                    sp.ControllingClient.SendAgentAlertMessage("Can't take a copy of an object that the owner did not create", false);
+                    sp.ControllingClient.SendAgentAlertMessage("'Take copy' is disabled in this sim", false);
                     return false;
                 }
 
-                List<UUID> invList = sog.RootPart.Inventory.GetInventoryList();
-                foreach (UUID invID in invList)
+                if (m_hardenPermissions)
                 {
-                    TaskInventoryItem item1 = sog.RootPart.Inventory.GetInventoryItem(invID);
-                    if (item1.OwnerID != item1.CreatorID)
+                    if (sog.OwnerID != sog.RootPart.CreatorID)
                     {
-                        sp.ControllingClient.SendAgentAlertMessage("Can't take a copy of an object with content that the owner did not create", false);
+                        sp.ControllingClient.SendAgentAlertMessage("Can't take a copy of an object that the owner did not create", false);
                         return false;
+                    }
+
+                    List<UUID> invList = sog.RootPart.Inventory.GetInventoryList();
+                    foreach (UUID invID in invList)
+                    {
+                        TaskInventoryItem item1 = sog.RootPart.Inventory.GetInventoryItem(invID);
+                        if (item1.OwnerID != item1.CreatorID)
+                        {
+                            sp.ControllingClient.SendAgentAlertMessage("Can't take a copy of an object containing items that the owner did not create", false);
+                            return false;
+                        }
                     }
                 }
             }
