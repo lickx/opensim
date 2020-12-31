@@ -8,7 +8,6 @@ namespace Amib.Threading
     public class WIGStartInfo
     {
         private bool _useCallerCallContext;
-        private bool _useCallerHttpContext;
         private bool _disposeOfStateObjects;
         private CallToPostExecute _callToPostExecute;
         private PostExecuteWorkItemCallback _postExecuteWorkItemCallback;
@@ -26,14 +25,12 @@ namespace Amib.Threading
             _postExecuteWorkItemCallback = SmartThreadPool.DefaultPostExecuteWorkItemCallback;
             _callToPostExecute = SmartThreadPool.DefaultCallToPostExecute;
             _disposeOfStateObjects = SmartThreadPool.DefaultDisposeOfStateObjects;
-            _useCallerHttpContext = SmartThreadPool.DefaultUseCallerHttpContext;
             _useCallerCallContext = SmartThreadPool.DefaultUseCallerCallContext;
         }
 
         public WIGStartInfo(WIGStartInfo wigStartInfo)
         {
             _useCallerCallContext = wigStartInfo.UseCallerCallContext;
-            _useCallerHttpContext = wigStartInfo.UseCallerHttpContext;
             _disposeOfStateObjects = wigStartInfo.DisposeOfStateObjects;
             _callToPostExecute = wigStartInfo.CallToPostExecute;
             _postExecuteWorkItemCallback = wigStartInfo.PostExecuteWorkItemCallback;
@@ -56,24 +53,10 @@ namespace Amib.Threading
         public virtual bool UseCallerCallContext
         {
             get { return _useCallerCallContext; }
-            set
-            {
-                ThrowIfReadOnly();
-                _useCallerCallContext = value;
-            }
-        }
-
-
-        /// <summary>
-        /// Get/Set if to use the caller's HTTP context
-        /// </summary>
-        public virtual bool UseCallerHttpContext
-        {
-            get { return _useCallerHttpContext; }
-            set
-            {
-                ThrowIfReadOnly();
-                _useCallerHttpContext = value;
+            set 
+            { 
+                ThrowIfReadOnly();  
+                _useCallerCallContext = value; 
             }
         }
 
@@ -84,10 +67,10 @@ namespace Amib.Threading
         public virtual bool DisposeOfStateObjects
         {
             get { return _disposeOfStateObjects; }
-            set
-            {
-                ThrowIfReadOnly();
-                _disposeOfStateObjects = value;
+            set 
+            { 
+                ThrowIfReadOnly();  
+                _disposeOfStateObjects = value; 
             }
         }
 
@@ -98,10 +81,10 @@ namespace Amib.Threading
         public virtual CallToPostExecute CallToPostExecute
         {
             get { return _callToPostExecute; }
-            set
-            {
-                ThrowIfReadOnly();
-                _callToPostExecute = value;
+            set 
+            { 
+                ThrowIfReadOnly();  
+                _callToPostExecute = value; 
             }
         }
 
@@ -112,10 +95,10 @@ namespace Amib.Threading
         public virtual PostExecuteWorkItemCallback PostExecuteWorkItemCallback
         {
             get { return _postExecuteWorkItemCallback; }
-            set
-            {
-                ThrowIfReadOnly();
-                _postExecuteWorkItemCallback = value;
+            set 
+            { 
+                ThrowIfReadOnly();  
+                _postExecuteWorkItemCallback = value; 
             }
         }
 
@@ -127,10 +110,10 @@ namespace Amib.Threading
         public virtual bool StartSuspended
         {
             get { return _startSuspended; }
-            set
-            {
-                ThrowIfReadOnly();
-                _startSuspended = value;
+            set 
+            { 
+                ThrowIfReadOnly();  
+                _startSuspended = value; 
             }
         }
 
@@ -152,10 +135,10 @@ namespace Amib.Threading
         public virtual bool FillStateWithArgs
         {
             get { return _fillStateWithArgs; }
-            set
-            {
-                ThrowIfReadOnly();
-                _fillStateWithArgs = value;
+            set 
+            { 
+                ThrowIfReadOnly();  
+                _fillStateWithArgs = value; 
             }
         }
 
