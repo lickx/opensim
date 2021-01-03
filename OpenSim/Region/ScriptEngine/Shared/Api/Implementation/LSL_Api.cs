@@ -4932,7 +4932,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         m_host.OwnerID, m_host.Name, destId,
                         (byte)InstantMessageDialog.TaskInventoryOffered,
                         m_host.OwnerID == m_host.GroupID, 
-                        string.Format("'{0}'  ( {1}/{2}/{3}/{4}/{5} )", item.Name, m_SlurlPrefix, World.RegionInfo.RegionName, (int)pos.X, (int)pos.Y, (int)pos.Z),
+                        string.Format("'{0}'  ( {1}/{2}/{3}/{4}/{5}/ )", item.Name, m_SlurlPrefix, World.RegionInfo.RegionName, (int)pos.X, (int)pos.Y, (int)pos.Z),
                         agentItem.ID, true, m_host.AbsolutePosition,
                         bucket, true);
 
@@ -8022,7 +8022,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         m_host.OwnerID, m_host.Name, destID,
                         (byte)InstantMessageDialog.TaskInventoryOffered,
                         m_host.OwnerID == m_host.GroupID,
-                        string.Format("'{0}'  ( {1}/{2}/{3}/{4}/{5} )", category, m_SlurlPrefix, World.Name, (int)pos.X, (int)pos.Y, (int)pos.Z),
+                        string.Format("'{0}'  ( {1}/{2}/{3}/{4}/{5}/ )", category, m_SlurlPrefix, World.Name, (int)pos.X, (int)pos.Y, (int)pos.Z),
                         folderID, false, pos,
                         bucket, false);
 
