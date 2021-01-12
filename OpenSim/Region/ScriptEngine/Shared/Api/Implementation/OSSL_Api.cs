@@ -6020,5 +6020,29 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
             m_envModule.WindlightRefresh(transition);
             return 1;
         }
+
+        public void osParticleSystem(LSL_List rules)
+        {
+            m_host.AddScriptLPS(1);
+
+            InitLSL();
+            if (m_LSL_Api != null)
+                m_LSL_Api.SetParticleSystem(m_host, rules, "osParticleSystem", true);
+        }
+
+        public void osLinkParticleSystem(LSL_Integer linknumber, LSL_List rules)
+        {
+            InitLSL();
+            if (m_LSL_Api != null)
+            {
+                List<SceneObjectPart> parts = m_LSL_Api.GetLinkParts(linknumber);
+
+                foreach (SceneObjectPart part in parts)
+                {
+                    m_LSL_Api.SetParticleSystem(part, rules, "osLinkParticleSystem", true);
+                }
+            }
+        }
+
     }
 }
