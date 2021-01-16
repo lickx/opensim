@@ -225,6 +225,9 @@ namespace OpenSim.Region.ClientStack.Linden
                         {
                             OSHttpResponse response = responses[requestID].osresponse;
 
+                            if (response.Priority < 0)
+                                response.Priority = 0;
+
                             Hashtable lixo = new Hashtable(1);
                             lixo["h"] = response;
                             return lixo;
