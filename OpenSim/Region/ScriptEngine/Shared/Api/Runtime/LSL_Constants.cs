@@ -975,10 +975,5 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         // llTargetedEmail
         public const int TARGETED_EMAIL_ROOT_CREATOR = 1;
         public const int TARGETED_EMAIL_OBJECT_OWNER = 2;
-
-        // llPassTouches
-        public const int PASS_IF_NOT_HANDLED = 0;
-        public const int PASS_ALWAYS         = 1;
-        public const int PASS_NEVER          = 2;
     }
 }
