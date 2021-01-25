@@ -388,7 +388,7 @@ namespace OpenSim.Region.Framework.Scenes
             if (((part.ScriptEvents & scriptEvents.touch_end) == 0) ||
                 (part.PassTouches && (part.LocalId != grp.RootPart.LocalId)))
             {
-                if ((grp.RootPart.ScriptEvents & scriptEvents.touch_start) != 0)
+                if ((grp.RootPart.ScriptEvents & scriptEvents.touch_end) != 0)
                     EventManager.TriggerObjectDeGrab(grp.RootPart.LocalId, part.LocalId, remoteClient, surfaceArg);
             }
         }
