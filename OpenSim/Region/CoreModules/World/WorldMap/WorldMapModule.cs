@@ -1608,7 +1608,7 @@ namespace OpenSim.Region.CoreModules.World.WorldMap
                         {
                             float scale = (float)Constants.RegionSize/(float)mb;
                             using(Bitmap scaledbmp = Util.ResizeImageSolid(mapbmp, (int)(bx * scale), (int)(by * scale)))
-                                data = OpenJPEG.EncodeFromImage(scaledbmp, true);
+                                data = OpenJPEG.EncodeFromImage(scaledbmp, false);
                         }
                         else
                             data = OpenJPEG.EncodeFromImage(mapbmp, false);

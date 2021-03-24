@@ -2000,7 +2000,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             UUID userID = sp.UUID;
             UUID sogOwnerID = sog.OwnerID;
             UUID sogCreatorID = sog.RootPart.CreatorID;
- 
+
             if (sogOwnerID == userID)
             {
                 if (m_hardenPermissions)
@@ -2102,7 +2102,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 //sp.ControllingClient.SendAgentAlertMessage("Copying this item has been denied by the permissions system", false);
                 return false;
             }
-            
+
             if (sog.OwnerID != sp.UUID && (perms & (uint)PermissionMask.Transfer) == 0)
                  return false;
 

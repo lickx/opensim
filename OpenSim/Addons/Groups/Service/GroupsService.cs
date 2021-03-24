@@ -232,7 +232,7 @@ namespace OpenSim.Groups
                         continue;
 
                     int nmembers = m_Database.MemberCount(d.GroupID);
-                    if(nmembers < 2)
+                    if(nmembers == 0)
                         continue;
 
                     DirGroupsReplyData g = new DirGroupsReplyData();

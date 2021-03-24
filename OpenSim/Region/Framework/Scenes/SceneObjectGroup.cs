@@ -685,16 +685,12 @@ namespace OpenSim.Region.Framework.Scenes
                     av.sitSOGmoved();
                 }
 
-                /*
                 // now that position is changed tell it to scripts
                 if (triggerScriptEvent && (ScriptEvents & scriptEvents.changed) != 0)
                 {
-                    foreach (SceneObjectPart part in parts)
-                    {
-                        part.TriggerScriptChangedEvent(Changed.POSITION);
-                    }
+                    // Only send this to the rootprim instead of all childprims
+                    m_rootPart.TriggerScriptChangedEvent(Changed.POSITION);
                 }
-                */
 
                 if (Scene != null)
                     Scene.EventManager.TriggerParcelPrimCountTainted();

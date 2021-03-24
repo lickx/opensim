@@ -74,15 +74,12 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
             if (!m_Enabled)
                 return;
 
-            lock (m_Scenelist)
-            {
-                m_Scenelist.Add(scene);
+            m_Scenelist.Add(scene);
 
-                //              scene.RegisterModuleInterface<IInventoryTransferModule>(this);
+//              scene.RegisterModuleInterface<IInventoryTransferModule>(this);
 
-                scene.EventManager.OnNewClient += OnNewClient;
-                scene.EventManager.OnIncomingInstantMessage += OnGridInstantMessage;
-            }
+            scene.EventManager.OnNewClient += OnNewClient;
+            scene.EventManager.OnIncomingInstantMessage += OnGridInstantMessage;
         }
 
         public void RegionLoaded(Scene scene)
@@ -104,12 +101,9 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
 
         public void RemoveRegion(Scene scene)
         {
-            lock (m_Scenelist)
-            {
-                scene.EventManager.OnNewClient -= OnNewClient;
-                scene.EventManager.OnIncomingInstantMessage -= OnGridInstantMessage;
-                m_Scenelist.Remove(scene);
-            }
+            scene.EventManager.OnNewClient -= OnNewClient;
+            scene.EventManager.OnIncomingInstantMessage -= OnGridInstantMessage;
+            m_Scenelist.Remove(scene);
         }
 
         public void PostInitialise()
