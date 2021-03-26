@@ -184,7 +184,7 @@ namespace OpenSim.Capabilities.Handlers
             response.ContentType = asset.Metadata.ContentType;
             response.RawBuffer = asset.Data;
             response.RawBufferLen = len;
-            response.Priority = -1;
+            response.Priority = 0;
         }
     }
 }
