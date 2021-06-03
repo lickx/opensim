@@ -5734,10 +5734,9 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         {
 
             if (stride <= 0)
-            {
                 stride = 1;
-            }
-            return src.Sort(stride, ascending);
+
+            return src.Sort(stride, ascending == 1);
         }
 
         public LSL_Integer llGetListLength(LSL_List src)
@@ -12749,30 +12748,34 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 if (World.RegionInfo.RegionName == simulator)
                 {
                     string lreply = String.Empty;
-                    GridRegion linfo = new GridRegion(World.RegionInfo);
+                    RegionInfo rinfo = World.RegionInfo;
                     switch (data)
                     {
                         case ScriptBaseClass.DATA_SIM_POS:
-                            {
-                                lreply = new LSL_Vector(
-                                    linfo.RegionLocX,
-                                    linfo.RegionLocY,
+                            lreply = new LSL_Vector(
+                                    rinfo.RegionLocX,
+                                    rinfo.RegionLocY,
                                     0).ToString();
-                            }
                             break;
                         case ScriptBaseClass.DATA_SIM_STATUS:
-                                lreply = "up"; // Duh!
+                            lreply = "up"; // Duh!
                             break;
                         case ScriptBaseClass.DATA_SIM_RATING:
-                            int access = linfo.Maturity;
-                            if (access == 0)
-                                lreply = "PG";
-                            else if (access == 1)
-                                lreply = "MATURE";
-                            else if (access == 2)
-                                lreply = "ADULT";
-                            else
-                                lreply = "UNKNOWN";
+                            switch (rinfo.RegionSettings.Maturity)
+                            {
+                                case 0:
+                                    lreply = "PG";
+                                    break;
+                                case 1:
+                                    lreply = "MATURE";
+                                    break;
+                                case 2:
+                                    lreply = "ADULT";
+                                    break;
+                                default:
+                                    lreply = "UNKNOWN";
+                                    break;
+                            }
                             break;
                         case ScriptBaseClass.DATA_SIM_RELEASE:
                             lreply = "OpenSim";
@@ -12819,15 +12822,21 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                                 reply = "up"; // Duh!
                                 break;
                             case ScriptBaseClass.DATA_SIM_RATING:
-                                int access = info.Maturity;
-                                if (access == 0)
-                                    reply = "PG";
-                                else if (access == 1)
-                                    reply = "MATURE";
-                                else if (access == 2)
-                                    reply = "ADULT";
-                                else
-                                    reply = "UNKNOWN";
+                                switch (info.Maturity)
+                                {
+                                    case 0:
+                                        reply = "PG";
+                                        break;
+                                    case 1:
+                                        reply = "MATURE";
+                                        break;
+                                    case 2:
+                                        reply = "ADULT";
+                                        break;
+                                    default:
+                                        reply = "UNKNOWN";
+                                        break;
+                                }
                                 break;
                             case ScriptBaseClass.DATA_SIM_RELEASE:
                                 reply = "OpenSim";
