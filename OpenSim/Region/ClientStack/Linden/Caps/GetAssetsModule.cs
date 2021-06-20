@@ -203,6 +203,7 @@ namespace OpenSim.Region.ClientStack.Linden
                 {
                     lock (responses)
                     {
+
                         return responses.ContainsKey(requestID);
                     }
                 };
@@ -224,8 +225,8 @@ namespace OpenSim.Region.ClientStack.Linden
                         try
                         {
                             OSHttpResponse response = responses[requestID].osresponse;
-                            //if (response.Priority < 0)
-                            //    response.Priority = 0;
+                            if (response.Priority < 0)
+                                response.Priority = 0;
 
                             Hashtable lixo = new Hashtable(1);
                             lixo["h"] = response;
