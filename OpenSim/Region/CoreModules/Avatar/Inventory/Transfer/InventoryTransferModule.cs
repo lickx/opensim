@@ -76,7 +76,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Inventory.Transfer
 
             m_Scenelist.Add(scene);
 
-//              scene.RegisterModuleInterface<IInventoryTransferModule>(this);
+//            scene.RegisterModuleInterface<IInventoryTransferModule>(this);
 
             scene.EventManager.OnNewClient += OnNewClient;
             scene.EventManager.OnIncomingInstantMessage += OnGridInstantMessage;
