@@ -38,7 +38,6 @@ using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Region.PhysicsModules.SharedBase;
 using OpenSim.Services.Interfaces;
-using TeleportFlags = OpenSim.Framework.Constants.TeleportFlags;
 
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 
@@ -2994,17 +2993,25 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
                 //    so.RootPart.KeyframeMotion.UpdateSceneObject(so);
             } else
             {
-                ScenePresence sp = Scene.GetScenePresence(so.OwnerID);
+                UUID OwnerID = so.OwnerID;
+                AgentCircuitData aCircuit = Scene.AuthenticateHandler.GetAgentCircuitData(OwnerID);
 
-                bool isHGTP = (sp.TeleportFlags & TeleportFlags.ViaHGLogin) != 0;
-
-                if (isHGTP && !sp.IsChildAgent)
+                if (aCircuit != null)
                 {
-                    //m_log.Debug("[ENTITY TRANSFER MODULE]: HGTP, starting scripts");
-                    so.RootPart.ParentGroup.CreateScriptInstances(
-                        0, false, Scene.DefaultScriptEngine, GetStateSource(so));
-                    so.aggregateScriptEvents();
-                    so.ResumeScripts();
+                    if ((aCircuit.teleportFlags & (uint)Constants.TeleportFlags.ViaHGLogin) != 0)
+                    {
+                        ScenePresence sp = Scene.GetScenePresence(so.OwnerID);
+                        if (!sp.IsChildAgent)
+                        {
+                            //m_log.Debug("[ENTITY TRANSFER MODULE]: HGTP, starting scripts");
+                            so.RootPart.ParentGroup.CreateScriptInstances(
+                                0, false, Scene.DefaultScriptEngine, GetStateSource(so));
+                            so.aggregateScriptEvents();
+                            so.ResumeScripts();
+
+                        }
+
+                    }
                 }
             }
 
