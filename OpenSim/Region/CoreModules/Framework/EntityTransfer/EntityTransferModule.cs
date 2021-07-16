@@ -2998,7 +2998,7 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
                 bool isHGTP = (sp.TeleportFlags & TeleportFlags.ViaHGLogin) != 0;
 
-                if (isHGTP && !sp.IsChildAgent && !sp.IsInLocalTransit)
+                if (isHGTP && !sp.IsChildAgent)
                 {
                     //m_log.Debug("[ENTITY TRANSFER MODULE]: HGTP, starting scripts");
                     so.RootPart.ParentGroup.CreateScriptInstances(
