@@ -232,11 +232,15 @@ namespace OpenSim.Server.Handlers.Hypergrid
             }
 
             List<string> friends = [];
-            // order is irrelevant
-            foreach (KeyValuePair<string, object> kvp in request)
+
+            // don't assume dictionary retains POST key order
+            int i = 0;
+            while (request.TryGetValue("friend_" + i, out object friendObj))
             {
-                if (kvp.Key.StartsWith("friend_"))
-                    friends.Add(kvp.Value.ToString());
+                if (friendObj != null)
+                    friends.Add(friendObj.ToString());
+
+                i++;
             }
 
             List<UUID> onlineFriends = friends.Count > 0 ? 
@@ -248,7 +252,7 @@ namespace OpenSim.Server.Handlers.Hypergrid
                 result["RESULT"] = "NULL";
             else
             {
-                int i = 0;
+                i = 0;
                 foreach (UUID f in onlineFriends)
                 {
                     result["friend_" + i.ToString()] = f.ToString();
