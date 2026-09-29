@@ -126,8 +126,26 @@ namespace OpenSim.Server.Handlers.Grid
             {
                 if (gridCfg != null)
                 {
+                    List<string> PublishedKeys = new()
+                    {
+                        "login",
+                        "gridname",
+                        "gridnick",
+                        "welcome",
+                        "economy",
+                        "about",
+                        "register",
+                        "help",
+                        "password",
+                        "GridStatus",
+                        "GridStatusRSS",
+                        "web_profile_url"
+                    };
                     foreach (string k in gridCfg.GetKeys())
-                        _info[k] = gridCfg.GetString(k);
+                    {
+                        if (PublishedKeys.Contains(k))
+                            _info[k] = gridCfg.GetString(k);
+                    }
                 }
                 else 
                 {
