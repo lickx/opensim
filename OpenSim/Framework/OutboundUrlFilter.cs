@@ -240,10 +240,12 @@ namespace OpenSim.Framework
 //                        m_log.DebugFormat("[OUTBOUND URL FILTER]: Found [{0}] in blacklist for {1}", url, Name);
 
                         // Check blacklist exceptions
-                        allowed
-                            = OutboundUrlFilter.IsInNetwork(
-                                addr, url.Port, m_blacklistExceptionNetworks, m_blacklistExceptionEndPoints, Name);
-
+                        if (!url.AbsolutePath.StartsWith("/lslhttp/"))
+                        {
+                            allowed
+                                = OutboundUrlFilter.IsInNetwork(
+                                    addr, url.Port, m_blacklistExceptionNetworks, m_blacklistExceptionEndPoints, Name);
+                        }
 //                        if (allowed)
 //                            m_log.DebugFormat("[OUTBOUND URL FILTER]: Found [{0}] in whitelist for {1}", url, Name);
                     }
