@@ -1,0 +1,2 @@
+# This is used to keep your search index up to date
+0 * * * * wget -q --spider https://example.com/helper/search/parser.php
