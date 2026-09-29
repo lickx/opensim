@@ -503,6 +503,8 @@
     ;; without having to use the Groups feature
     ; simple_build_permissions = false
 
+    ; Disallow "take copy" of ANY object set as "Allow anyone to take a copy"
+    ; take_copy_restricted = false
 
 [Estates]
     ; If these values are commented out then the user will be asked for estate details when required (this is the normal case).

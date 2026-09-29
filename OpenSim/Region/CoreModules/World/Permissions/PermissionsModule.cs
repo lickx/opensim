@@ -94,6 +94,7 @@ namespace OpenSim.Region.CoreModules.World.Permissions
         private bool m_forceGridAdminsOnly;
         private bool m_forceAdminModeAlwaysOn;
         private bool m_allowAdminActionsWithoutGodMode;
+        private bool m_takeCopyRestricted = false;
 
         /// <value>
         /// The set of users that are allowed to create scripts.  This is only active if permissions are not being
@@ -187,6 +188,8 @@ namespace OpenSim.Region.CoreModules.World.Permissions
                 m_log.Info("[PERMISSIONS]: serverside_object_permissions = false in ini file so disabling all region service permission checks");
             else
                 m_log.Debug("[PERMISSIONS]: Enabling all region service permission checks");
+
+            m_takeCopyRestricted = Util.GetConfigVarFromSections<bool>(config, "take_copy_restricted", sections, m_takeCopyRestricted);
 
             string grant = Util.GetConfigVarFromSections<string>(config, "GrantLSL",
                 new string[] { "Startup", "Permissions" }, string.Empty);
@@ -2022,6 +2025,10 @@ namespace OpenSim.Region.CoreModules.World.Permissions
 
             if(sog.OwnerID.NotEqual(sp.UUID) && (perms & (uint)PermissionMask.Transfer) == 0)
                  return false;
+
+            if (sog.OwnerID.NotEqual(sp.UUID) && !IsFriendWithPerms(sp.UUID, sog.OwnerID) && !sp.IsGod && m_takeCopyRestricted)
+                return false;
+
             return true;
         }
 
