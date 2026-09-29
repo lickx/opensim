@@ -63,7 +63,7 @@ namespace OpenSim.Framework
         private uint _flags = (uint)ParcelFlags.AllowFly | (uint)ParcelFlags.AllowLandmark |
                                 (uint)ParcelFlags.AllowAPrimitiveEntry |
                                 (uint)ParcelFlags.AllowDeedToGroup |
-                                (uint)ParcelFlags.CreateObjects | (uint)ParcelFlags.AllowOtherScripts |
+                                (uint)ParcelFlags.AllowOtherScripts |
                                 (uint)ParcelFlags.AllowVoiceChat;
 
         private byte _landingType = (byte)OpenMetaverse.LandingType.Direct;
@@ -84,7 +84,7 @@ namespace OpenSim.Framework
         private UUID _snapshotID = UUID.Zero;
         private Vector3 _userLocation = new();
         private Vector3 _userLookAt = new();
-        private int _otherCleanTime = 0;
+        private int _otherCleanTime = 5;
         private string _mediaType = "none/none";
         private string _mediaDescription = "";
         private int _mediaHeight = 0;
