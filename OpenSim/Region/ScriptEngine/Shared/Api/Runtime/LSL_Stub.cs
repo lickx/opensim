@@ -1041,6 +1041,12 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public LSL_Float llGetRegionTimeOfDay()
+        {
+            return m_LSL_Functions.llGetRegionTimeOfDay();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public LSL_String llGetTimestamp()
         {
             return m_LSL_Functions.llGetTimestamp();

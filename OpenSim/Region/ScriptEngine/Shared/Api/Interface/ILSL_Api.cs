@@ -223,6 +223,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api.Interfaces
         LSL_Vector llGetTextureScale(int side);
          LSL_Float llGetTime();
          LSL_Float llGetTimeOfDay();
+         LSL_Float llGetRegionTimeOfDay();
         LSL_String llGetTimestamp();
         LSL_Vector llGetTorque();
        LSL_Integer llGetUnixTime();

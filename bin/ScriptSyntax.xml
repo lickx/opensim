@@ -5116,6 +5116,13 @@
  <map>
   <key>return</key><string>float</string>
   <key>arguments</key><undef/>
+  <key>tooltip</key><string>Returns parcel time in seconds since midnight.\n- Sleep: 0 seconds.</string>
+ </map>
+ <key>llGetRegionTimeOfDay</key>
+ <map>
+  <key>return</key><string>float</string>
+  <key>arguments</key><undef/>
+  <key>tooltip</key><string>Returns region time in seconds since midnight.\n- Sleep: 0 seconds.</string>
  </map>
  <key>llGetTimestamp</key>
  <map>

@@ -1004,6 +1004,12 @@ namespace OpenSim.Region.CoreModules.World.LightShare
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public float GetDayFractionTime(Vector3 pos)
+        {
+            return GetDayFractionTime(GetEnvironment(pos));
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public float GetRegionDayFractionTime()
         {
             return GetDayFractionTime(GetRegionEnvironment());

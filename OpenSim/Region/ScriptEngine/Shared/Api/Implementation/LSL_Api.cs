@@ -2803,7 +2803,30 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
         public LSL_Float llGetTimeOfDay()
         {
-            return (double)((DateTime.Now.TimeOfDay.TotalMilliseconds / 1000) % (3600 * 4));
+            if (m_envModule is null)
+            {
+                return (float)((DateTime.Now.TimeOfDay.TotalMilliseconds / 1000) % (3600 * 4));
+            }
+            else
+            {
+                // Similar as osGetApparentTime(), taking into account parcel environment
+                float frac = m_envModule.GetDayFractionTime(m_host.GetWorldPosition());
+                return 86400 * frac;
+            }
+        }
+
+        public LSL_Float llGetRegionTimeOfDay()
+        {
+            if (m_envModule is null)
+            {
+                return (float)((DateTime.Now.TimeOfDay.TotalMilliseconds / 1000) % (3600 * 4));
+            }
+            else
+            {
+                // Same as osGetApparentTime(), taking into account region environment
+                float frac = m_envModule.GetRegionDayFractionTime();
+                return 86400 * frac;
+            }
         }
 
         public LSL_Float llGetWallclock()
