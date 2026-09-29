@@ -87,7 +87,10 @@ namespace OpenSim.Region.Framework.Scenes
             if (permissionToDelete)
             {
                 foreach (SceneObjectGroup g in objectGroups)
+                {
+                    g.LastOwnerID = g.OwnerID;
                     g.DeleteGroupFromScene(false);
+                }
             }
 
             if(Monitor.TryEnter(m_threadLock))
