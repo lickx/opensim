@@ -1214,11 +1214,16 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
             {
                 if (m_thisGridInfo.IsLocalGrid(homeuri.URL) == 1) // local
                 {
-                    oldUser.FirstName = firstname;
-                    oldUser.LastName = lastname;
-                    oldUser.IsLocal = true;
-                    oldUser.HomeURL = string.Empty;
-                    oldUser.HasGridUserTried = true;
+                    UserAccount account = m_userAccountService.GetUserAccount(UUID.Zero, firstname, lastname);
+                    if (account != null)
+                    {
+                        oldUser.FirstName = firstname;
+                        oldUser.LastName = lastname;
+                        oldUser.IsLocal = true;
+                        oldUser.HomeURL = string.Empty;
+                        oldUser.HasGridUserTried = true;
+                    }
+                    else return;
                 }
                 else
                 {
@@ -1232,11 +1237,16 @@ namespace OpenSim.Region.CoreModules.Framework.UserManagement
             {
                 if (string.IsNullOrEmpty(homeuri.Host)) // take this as local
                 {
-                    oldUser.FirstName = firstname;
-                    oldUser.LastName = lastname;
-                    oldUser.IsLocal = true;
-                    oldUser.HomeURL = string.Empty;
-                    oldUser.HasGridUserTried = true;
+                    UserAccount account = m_userAccountService.GetUserAccount(UUID.Zero, firstname, lastname);
+                    if (account != null && account.PrincipalID == id)
+                    {
+                        oldUser.FirstName = firstname;
+                        oldUser.LastName = lastname;
+                        oldUser.IsLocal = true;
+                        oldUser.HomeURL = string.Empty;
+                        oldUser.HasGridUserTried = true;
+                    }
+                    else return;
                 }
                 else
                 {
