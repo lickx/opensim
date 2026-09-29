@@ -6481,6 +6481,18 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                         return m_internalObjectHost;
                     return "";
 
+                case "region_rating":
+                    switch(World.RegionInfo.RegionSettings.Maturity)
+                    {
+                        case 0: return "PG";
+                        case 1: return "MATURE";
+                        case 2: return "ADULT";
+                        default: return "UNKNOWN";
+                    }
+
+                case "grid":
+                    return World.SceneGridInfo == null ? string.Empty : World.SceneGridInfo.GridName;
+
                 default:
                     return "";
             }
