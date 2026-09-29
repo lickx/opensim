@@ -711,10 +711,8 @@ namespace OpenSim.Region.Framework.Scenes
                 // now that position is changed tell it to scripts
                 if (triggerScriptEvent && (ScriptEvents & scriptEvents.changed) != 0)
                 {
-                    foreach (SceneObjectPart part in parts)
-                    {
-                        part.TriggerScriptChangedEvent(Changed.POSITION);
-                    }
+                    // Only send this to the rootprim instead of all childprims
+                    m_rootPart.TriggerScriptChangedEvent(Changed.POSITION);
                 }
 
                 Scene?.EventManager.TriggerParcelPrimCountTainted();
