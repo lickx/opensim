@@ -485,9 +485,9 @@
 
     ;; This allows some control over permissions
     ;; please note that this still doesn't duplicate SL, and is not intended to
-    ;# {region_owner_is_god} {} {Allow region owner gods} {true false} true
+    ;# {region_owner_is_god} {} {Allow region owner gods} {true false} false
     ;; Allow region owners to assume god powers in their regions
-    ; region_owner_is_god = true
+    ; region_owner_is_god = false
 
     ;# {region_manager_is_god} {} {Allow region manager gods} {true false} false
     ;; Allow region managers to assume god powers in regions they manage
