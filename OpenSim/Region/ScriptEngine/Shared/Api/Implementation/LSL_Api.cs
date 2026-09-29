@@ -118,6 +118,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         protected bool m_AllowGodFunctions;
 
         protected double m_timer = Util.GetTimeStamp();
+        protected string m_SlurlPrefix = "http://slurl.com/secondlife";
+
         protected bool m_waitingForScriptAnswer = false;
         protected bool m_automaticLinkPermission = false;
         protected int m_notecardLineReadCharsMax = 255;
@@ -442,6 +444,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 //    it by this factor. May be zero to turn off recoil all together.
                 m_recoilScaleFactor = seConfig.GetFloat("RecoilScaleFactor", m_recoilScaleFactor);
                 m_AllowGodFunctions = seConfig.GetBoolean("AllowGodFunctions", false);
+
+                m_SlurlPrefix = seConfig.GetString("SlurlPrefix", m_SlurlPrefix);
 
                 m_disable_underground_movement = seConfig.GetBoolean("DisableUndergroundMovement", true);
 
@@ -8126,8 +8130,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                 GridInstantMessage msg = new(World, m_host.OwnerID, m_host.Name, destID,
                         (byte)InstantMessageDialog.TaskInventoryOffered,
                         m_host.OwnerID.Equals(m_host.GroupID),
-                        string.Format("'{0}'", category),
-                        //string.Format("'{0}'  ( http://slurl.com/secondlife/{1}/{2}/{3}/{4} )", category, World.Name, (int)pos.X, (int)pos.Y, (int)pos.Z),
+                        string.Format("'{0}'  ( {1}/{2}/{3}/{4}/{5}/ )", category, m_SlurlPrefix, World.Name, (int)pos.X, (int)pos.Y, (int)pos.Z),                        //string.Format("'{0}'  ( http://slurl.com/secondlife/{1}/{2}/{3}/{4} )", category, World.Name, (int)pos.X, (int)pos.Y, (int)pos.Z),
                         folderID, false, pos,
                         bucket, false);
 
