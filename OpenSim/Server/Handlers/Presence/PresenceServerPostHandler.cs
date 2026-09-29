@@ -69,23 +69,28 @@ namespace OpenSim.Server.Handlers.Presence
             string method = string.Empty;
             try
             {
-                Dictionary<string, object> request = ServerUtils.ParseQueryString(body);
+                Dictionary<string, object> request =
+                        ServerUtils.ParseQueryString(body);
 
-                if (!request.TryGetValue("METHOD", out object tmpobj) || tmpobj is not string)
+                if (!request.ContainsKey("METHOD"))
                     return FailureResult();
 
-                method = (string)tmpobj;
+                method = request["METHOD"].ToString();
+
                 switch (method)
                 {
                     case "login":
                         {
-                            //return LoginAgent(request); this is ilegal
+                            return LoginAgent(request);
+                            /*
+                                // this commented code causes login issues when behind a proxy:
                             if (request.TryGetValue("UserID", out object uo) && uo is string user)
-                                m_log.Debug($"[PRESENCE HANDLER]: ilegal login try from {httpRequest.RemoteIPEndPoint} for userID {user}");
+                                m_log.Debug($"[PRESENCE HANDLER]: illegal login try from {httpRequest.RemoteIPEndPoint} for userID {user}");
                             else
-                                m_log.Debug($"[PRESENCE HANDLER]: ilegal login try from {httpRequest.RemoteIPEndPoint} for unknown user");
+                                m_log.Debug($"[PRESENCE HANDLER]: illegal login try from {httpRequest.RemoteIPEndPoint} for unknown user");
 
                             return FailureResult();
+                            */
                         }
                     case "logout":
                         return LogoutAgent(request);
@@ -98,11 +103,11 @@ namespace OpenSim.Server.Handlers.Presence
                     case "getagents":
                         return GetAgents(request);
                 }
-                m_log.Debug($"[PRESENCE HANDLER]: unknown method request: {method}");
+                m_log.DebugFormat("[PRESENCE HANDLER]: unknown method request: {0}", method);
             }
             catch (Exception e)
             {
-                m_log.Debug($"[PRESENCE HANDLER]: Exception in method {method}: {e.Message}");
+                m_log.DebugFormat("[PRESENCE HANDLER]: Exception in method {0}: {1}", method, e);
             }
 
             return FailureResult();
