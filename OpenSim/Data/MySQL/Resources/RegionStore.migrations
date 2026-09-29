@@ -572,3 +572,9 @@ COMMIT;
 BEGIN;
 ALTER TABLE `prims` ADD COLUMN `StartStr` text default NULL;
 COMMIT;
+
+:VERSION 68         #----- mantis 09242: support high unicode in prim hovertext
+BEGIN;
+ALTER TABLE `prims`
+MODIFY `Text` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+COMMIT;
