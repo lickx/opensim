@@ -32,7 +32,9 @@ using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using log4net;
 using MailKit;
+using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
+using MailKit.Search;
 using MimeKit;
 using Nini.Config;
 using OpenMetaverse;
@@ -40,6 +42,7 @@ using OpenSim.Framework;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using Mono.Addins;
+using System.Security.Cryptography;
 
 namespace OpenSim.Region.CoreModules.Scripting.EmailModules
 {
@@ -68,8 +71,14 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
         private string SMTP_SERVER_LOGIN = null;
         private string SMTP_SERVER_PASSWORD = null;
 
-        private bool m_enableEmailToExternalObjects = true;
-        private bool m_enableEmailToSMTP = true;
+        private bool IMAP_SERVER_TLS = false;
+        private string IMAP_SERVER_HOSTNAME = null;
+        private int IMAP_SERVER_PORT = 143;
+        private string IMAP_SERVER_LOGIN = null;
+        private string IMAP_SERVER_PASSWORD = null;
+
+        private bool m_enableEmailToExternalObjects = false;
+        private bool m_enableEmailToSMTP = false;
 
         private ParserOptions m_mailParseOptions;
 
@@ -102,6 +111,7 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
         private int m_MaxEmailSize = 4096;  // largest email allowed by default, as per lsl docs.
 
         private static SslPolicyErrors m_SMTP_SslPolicyErrorsMask;
+        private static SslPolicyErrors m_IMAP_SslPolicyErrorsMask;
         private bool m_checkSpecName;
 
         private object m_queuesLock = new object();
@@ -123,22 +133,22 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
             if(startupConfig.GetString("emailmodule", "DefaultEmailModule") != "DefaultEmailModule")
                 return;
 
-            //Load SMTP SERVER config
+            //Load Email config
             try
             {
-                IConfig SMTPConfig = config.Configs["SMTP"];
-                if (SMTPConfig  == null)
+                IConfig EmailConfig = config.Configs["Email"];
+                if (EmailConfig  == null)
                     return;
 
-                if(!SMTPConfig.GetBoolean("enabled", false))
+                if(!EmailConfig.GetBoolean("enabled", true))
                     return;
 
-                m_enableEmailToExternalObjects = SMTPConfig.GetBoolean("enableEmailToExternalObjects", m_enableEmailToExternalObjects);
-                m_enableEmailToSMTP = SMTPConfig.GetBoolean("enableEmailToSMTP", m_enableEmailToSMTP);
+                m_enableEmailToExternalObjects = EmailConfig.GetBoolean("enableEmailToExternalObjects", m_enableEmailToExternalObjects);
+                m_enableEmailToSMTP = EmailConfig.GetBoolean("enableEmailToSMTP", m_enableEmailToSMTP);
 
-                m_MailsToPrimAddressPerHour = SMTPConfig.GetInt("MailsToPrimAddressPerHour", m_MailsToPrimAddressPerHour);
+                m_MailsToPrimAddressPerHour = EmailConfig.GetInt("MailsToPrimAddressPerHour", m_MailsToPrimAddressPerHour);
                 m_MailsToPrimAddressRate = m_MailsToPrimAddressPerHour / 3600.0;
-                m_MailsFromOwnerPerHour = SMTPConfig.GetInt("MailsFromOwnerPerHour", m_MailsFromOwnerPerHour);
+                m_MailsFromOwnerPerHour = EmailConfig.GetInt("MailsFromOwnerPerHour", m_MailsFromOwnerPerHour);
                 m_MailsFromOwnerRate = m_MailsFromOwnerPerHour / 3600.0;
 
                 m_mailParseOptions = new ParserOptions()
@@ -146,17 +156,17 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
                     AllowAddressesWithoutDomain = false,
                 };
 
-                m_InterObjectHostname = SMTPConfig.GetString("internal_object_host", m_InterObjectHostname);
+                m_InterObjectHostname = EmailConfig.GetString("internal_object_host", m_InterObjectHostname);
                 m_checkSpecName = !m_InterObjectHostname.Equals("lsl.secondlife.com");
 
                 if (m_enableEmailToSMTP)
                 {
-                    m_SMTP_MailsPerDay = SMTPConfig.GetInt("SMTP_MailsPerDay", m_SMTP_MailsPerDay);
+                    m_SMTP_MailsPerDay = EmailConfig.GetInt("SMTP_MailsPerDay", m_SMTP_MailsPerDay);
                     m_SMTP_MailsRate = m_SMTP_MailsPerDay / 86400.0;
-                    m_MailsToSMTPAddressPerHour = SMTPConfig.GetInt("MailsToSMTPAddressPerHour", m_MailsToPrimAddressPerHour);
+                    m_MailsToSMTPAddressPerHour = EmailConfig.GetInt("MailsToSMTPAddressPerHour", m_MailsToPrimAddressPerHour);
                     m_MailsToSMTPAddressRate = m_MailsToPrimAddressPerHour / 3600.0;
 
-                    SMTP_SERVER_HOSTNAME = SMTPConfig.GetString("SMTP_SERVER_HOSTNAME", SMTP_SERVER_HOSTNAME);
+                    SMTP_SERVER_HOSTNAME = EmailConfig.GetString("SMTP_SERVER_HOSTNAME", SMTP_SERVER_HOSTNAME);
                     OSHHTPHost hosttmp = new OSHHTPHost(SMTP_SERVER_HOSTNAME, true);
                     if(!hosttmp.IsResolvedHost)
                     {
@@ -164,22 +174,22 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
                         return;
                     }
 
-                    SMTP_SERVER_PORT = SMTPConfig.GetInt("SMTP_SERVER_PORT", SMTP_SERVER_PORT);
-                    SMTP_SERVER_TLS = SMTPConfig.GetBoolean("SMTP_SERVER_TLS", SMTP_SERVER_TLS);
+                    SMTP_SERVER_PORT = EmailConfig.GetInt("SMTP_SERVER_PORT", SMTP_SERVER_PORT);
+                    SMTP_SERVER_TLS = EmailConfig.GetBoolean("SMTP_SERVER_TLS", SMTP_SERVER_TLS);
 
-                    string smtpfrom = SMTPConfig.GetString("SMTP_SERVER_FROM", string.Empty);
-                    m_HostName = SMTPConfig.GetString("host_domain_header_from", m_HostName);
+                    string smtpfrom = EmailConfig.GetString("SMTP_SERVER_FROM", string.Empty);
+                    m_HostName = EmailConfig.GetString("host_domain_header_from", m_HostName);
                     if (!string.IsNullOrEmpty(smtpfrom) && !MailboxAddress.TryParse(m_mailParseOptions, smtpfrom, out SMTP_MAIL_FROM))
                     {
                         m_log.ErrorFormat("[EMAIL]: Invalid SMTP_SERVER_FROM {0}", smtpfrom);
                         return;
                     }
 
-                    SMTP_SERVER_LOGIN = SMTPConfig.GetString("SMTP_SERVER_LOGIN", SMTP_SERVER_LOGIN);
-                    SMTP_SERVER_PASSWORD = SMTPConfig.GetString("SMTP_SERVER_PASSWORD", SMTP_SERVER_PASSWORD);
+                    SMTP_SERVER_LOGIN = EmailConfig.GetString("SMTP_SERVER_LOGIN", SMTP_SERVER_LOGIN);
+                    SMTP_SERVER_PASSWORD = EmailConfig.GetString("SMTP_SERVER_PASSWORD", SMTP_SERVER_PASSWORD);
 
-                    bool VerifyCertChain = SMTPConfig.GetBoolean("SMTP_VerifyCertChain", true);
-                    bool VerifyCertNames = SMTPConfig.GetBoolean("SMTP_VerifyCertNames", true);
+                    bool VerifyCertChain = EmailConfig.GetBoolean("SMTP_VerifyCertChain", true);
+                    bool VerifyCertNames = EmailConfig.GetBoolean("SMTP_VerifyCertNames", true);
                     m_SMTP_SslPolicyErrorsMask = VerifyCertChain ? 0 : SslPolicyErrors.RemoteCertificateChainErrors;
                     if (!VerifyCertNames)
                         m_SMTP_SslPolicyErrorsMask |= SslPolicyErrors.RemoteCertificateNameMismatch;
@@ -191,7 +201,35 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
                     m_log.Warn("[EMAIL]: SMTP disabled, set enableEmailSMTP to enable");
                 }
 
-                m_MaxEmailSize = SMTPConfig.GetInt("email_max_size", m_MaxEmailSize);
+                if (m_enableEmailToExternalObjects)
+                {
+                    IMAP_SERVER_HOSTNAME = EmailConfig.GetString("IMAP_SERVER_HOSTNAME", IMAP_SERVER_HOSTNAME);
+                    OSHHTPHost hosttmp = new OSHHTPHost(IMAP_SERVER_HOSTNAME, true);
+                    if(!hosttmp.IsResolvedHost)
+                    {
+                        m_log.ErrorFormat("[EMAIL]: could not resolve IMAP_SERVER_HOSTNAME {0}", IMAP_SERVER_HOSTNAME);
+                        return;
+                    }
+
+                    IMAP_SERVER_PORT = EmailConfig.GetInt("IMAP_SERVER_PORT", IMAP_SERVER_PORT);
+                    IMAP_SERVER_TLS = EmailConfig.GetBoolean("IMAP_SERVER_TLS", IMAP_SERVER_TLS);
+                    IMAP_SERVER_LOGIN = EmailConfig.GetString("IMAP_SERVER_LOGIN", IMAP_SERVER_LOGIN);
+                    IMAP_SERVER_PASSWORD = EmailConfig.GetString("IMAP_SERVER_PASSWORD", IMAP_SERVER_PASSWORD);
+
+                    bool VerifyCertChain = EmailConfig.GetBoolean("IMAP_VerifyCertChain", true);
+                    bool VerifyCertNames = EmailConfig.GetBoolean("IMAP_VerifyCertNames", true);
+                    m_IMAP_SslPolicyErrorsMask = VerifyCertChain ? 0 : SslPolicyErrors.RemoteCertificateChainErrors;
+                    if (!VerifyCertNames)
+                        m_IMAP_SslPolicyErrorsMask |= SslPolicyErrors.RemoteCertificateNameMismatch;
+                    m_IMAP_SslPolicyErrorsMask = ~m_IMAP_SslPolicyErrorsMask;
+                }
+                else
+                {
+                    m_IMAP_SslPolicyErrorsMask = ~SslPolicyErrors.None;
+                    m_log.Warn("[EMAIL]: IMAP disabled, set enableEmailToExternalObjects to enable");
+                }
+
+                m_MaxEmailSize = EmailConfig.GetInt("email_max_size", m_MaxEmailSize);
                 if(m_MaxEmailSize < 256 || m_MaxEmailSize > 1000000)
                 {
                     m_log.Warn("[EMAIL]: email_max_size out of range [256, 1000000], Changed to default 4096");
@@ -369,6 +407,11 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
         {
             return (sslPolicyErrors & m_SMTP_SslPolicyErrorsMask) == SslPolicyErrors.None;
         }
+        public static bool imapValidateServerCertificate(object sender, X509Certificate certificate,
+                X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            return (sslPolicyErrors & m_IMAP_SslPolicyErrorsMask) == SslPolicyErrors.None;
+        }
 
         /// <summary>
         /// SendMail function utilized by llEMail
@@ -500,7 +543,7 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
                             client.Connect(SMTP_SERVER_HOSTNAME, SMTP_SERVER_PORT, MailKit.Security.SecureSocketOptions.StartTls);
                         }
                         else
-                            client.Connect(SMTP_SERVER_HOSTNAME, SMTP_SERVER_PORT);
+                            client.Connect(SMTP_SERVER_HOSTNAME, SMTP_SERVER_PORT, MailKit.Security.SecureSocketOptions.None);
 
                         if (!string.IsNullOrEmpty(SMTP_SERVER_LOGIN) && !string.IsNullOrEmpty(SMTP_SERVER_PASSWORD))
                             client.Authenticate(SMTP_SERVER_LOGIN, SMTP_SERVER_PASSWORD);
@@ -549,25 +592,60 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
                 if (!UUID.TryParse(address.Substring(0, indx), out UUID toID))
                     return;
 
-                Email email = new Email();
-                email.time = Util.UnixTimeSinceEpoch().ToString();
-                email.subject = subject;
-                email.sender = objectID.ToString() + "@" + m_InterObjectHostname;
-                email.message = "Object-Name: " + LastObjectName +
-                              "\nRegion: " + LastObjectRegionName + "\nLocal-Position: " +
-                              LastObjectPosition + "\n\n" + body;
-
                 if (IsLocal(toID))
                 {
                     // object in this instance
+
+                    Email email = new Email();
+                    email.time = Util.UnixTimeSinceEpoch().ToString();
+                    email.subject = subject;
+                    email.sender = objectID.ToString() + "@" + m_InterObjectHostname;
+                    email.message = "Object-Name: " + LastObjectName +
+                                  "\nRegion: " + LastObjectRegionName + "\nLocal-Position: " +
+                                  LastObjectPosition + "\n\n" + body;
+
                     InsertEmail(toID, email);
                 }
                 else
                 {
+                    // object on another region
+
                     if (!m_enableEmailToExternalObjects)
                         return;
-                    // object on another region
-                    // TODO FIX
+
+                    // Insert mail into IMAP inbox
+                    using (var client = new ImapClient ()) {
+                        if (IMAP_SERVER_TLS)
+                        {
+                            client.ServerCertificateValidationCallback = imapValidateServerCertificate;
+                            client.Connect(IMAP_SERVER_HOSTNAME, IMAP_SERVER_PORT, MailKit.Security.SecureSocketOptions.StartTls);
+                        }
+                        else
+                            client.Connect(IMAP_SERVER_HOSTNAME, IMAP_SERVER_PORT, MailKit.Security.SecureSocketOptions.None);
+
+                        if (client.IsConnected && !string.IsNullOrEmpty(IMAP_SERVER_LOGIN) && !string.IsNullOrEmpty(IMAP_SERVER_PASSWORD))
+                        {
+                            client.Authenticate(IMAP_SERVER_LOGIN, IMAP_SERVER_PASSWORD);
+                            client.Inbox.Open(FolderAccess.ReadWrite);
+
+                            var builder = new BodyBuilder();
+                            builder.TextBody = "Object-Name: " + LastObjectName +
+                                               "\nRegion: " + LastObjectRegionName +
+                                               "\nLocal-Position: " + LastObjectPosition +
+                                               "\n\n" + body;
+
+                            MimeMessage email = new()
+                            {
+                                Date = DateTimeOffset.UtcNow,
+                                Subject = subject,
+                                Sender = new MailboxAddress(LastObjectName, objectID.ToString() + "@" + m_InterObjectHostname),
+                                Body = builder.ToMessageBody()
+                            };
+                            email.To.Add(MailboxAddress.Parse(address));
+                            client.Inbox.Append(email);
+                            client.Disconnect(true);
+                        }
+                    }
                 }
             }
         }
@@ -634,6 +712,50 @@ namespace OpenSim.Region.CoreModules.Scripting.EmailModules
                         m_SMPTAddressThrottles.Remove(remove);
 
                     m_nextSMTPAddressThrottlesExpire = now + 3600;
+                }
+            }
+
+            // Fetch mail from imap inbox here
+            if (m_enableEmailToExternalObjects) {
+                using (var client = new ImapClient ()) {
+                    if (IMAP_SERVER_TLS)
+                    {
+                        client.ServerCertificateValidationCallback = imapValidateServerCertificate;
+                        client.Connect(IMAP_SERVER_HOSTNAME, IMAP_SERVER_PORT, MailKit.Security.SecureSocketOptions.StartTls);
+                    }
+                    else
+                        client.Connect(IMAP_SERVER_HOSTNAME, IMAP_SERVER_PORT, MailKit.Security.SecureSocketOptions.None);
+
+                    if (client.IsConnected && !string.IsNullOrEmpty(IMAP_SERVER_LOGIN) && !string.IsNullOrEmpty(IMAP_SERVER_PASSWORD))
+                    {
+                        client.Authenticate(IMAP_SERVER_LOGIN, IMAP_SERVER_PASSWORD);
+
+                        client.Inbox.Open(FolderAccess.ReadWrite);
+
+                        SearchQuery query = SearchQuery.ToContains(objectID.ToString()+"@"+m_InterObjectHostname).And(SearchQuery.NotDeleted);
+                        if (!string.IsNullOrEmpty(sender))
+                            query = query.And(SearchQuery.FromContains(sender));
+                        if (!string.IsNullOrEmpty(subject))
+                            query = query.And(SearchQuery.SubjectContains(subject));
+                        var uids = client.Inbox.Search(query);
+
+                        foreach (var uid in uids)
+                        {
+                            var message = client.Inbox.GetMessage(uid);
+
+                            Email email = new()
+                            {
+                                time = message.Date.ToString(),
+                                subject = message.Subject,
+                                sender = message.From.ToString(),
+                                message = message.GetTextBody(MimeKit.Text.TextFormat.Plain)
+                            };
+                            InsertEmail(objectID, email);
+                            client.Inbox.AddFlags(uid, MessageFlags.Deleted, true);
+                        }
+                        client.Inbox.Expunge();
+                        client.Disconnect(true);
+                    }
                 }
             }
 

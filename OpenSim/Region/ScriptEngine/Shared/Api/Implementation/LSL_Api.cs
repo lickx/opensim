@@ -520,7 +520,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     m_useMeshCacheInCastRay = lslConfig.GetBoolean("UseMeshCacheInLlCastRay", m_useMeshCacheInCastRay);
                 }
 
-                IConfig smtpConfig = seConfigSource.Configs["SMTP"];
+                IConfig smtpConfig = seConfigSource.Configs["Email"];
                 if (smtpConfig != null)
                 {
                     // there's an smtp config, so load in the snooze time.
@@ -529,7 +529,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                     m_internalObjectHost = smtpConfig.GetString("internal_object_host", m_internalObjectHost);
                 }
 
-                IConfig chatConfig = seConfigSource.Configs["SMTP"];
+                IConfig chatConfig = seConfigSource.Configs["Chat"];
                 if(chatConfig != null)
                 {
                     m_whisperdistance = chatConfig.GetInt("whisper_distance", m_whisperdistance);
@@ -6475,6 +6475,11 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                 case "shout_range":
                     return m_shoutdistance.ToString();
+
+                case "mailname":
+                    if (m_emailModule is not null)
+                        return m_internalObjectHost;
+                    return "";
 
                 default:
                     return "";

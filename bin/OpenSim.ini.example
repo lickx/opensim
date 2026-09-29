@@ -283,8 +283,11 @@
     ; HttpProxyExceptions = ".mydomain.com;localhost"
 
     ;# {emailmodule} {} {Provide llEmail and llGetNextEmail functionality? (requires SMTP server)} {DefaultEmailModule} none
-    ;; The email module requires some configuration. It needs an SMTP
-    ;; server to send mail through.
+    ;; By default email only works within the boundaries of a sim
+    ;; For intersim mail, all sims involved need to use the same IMAP mailbox
+    ;; and enableEmailToExternalObjects = true in [Email]
+    ;; If you want to also allow mail to enter and leave the grid, SMTP will
+    ;; also need to be setup 
     ; emailmodule = DefaultEmailModule
 
     ;# {SpawnPointRouting} {} {Set routing method for Telehub Spawnpoints} {closest random sequence} closest
@@ -537,18 +540,10 @@
     ;; Password for the default estate owner
     ; DefaultEstateOwnerPassword = password
 
-[SMTP]
-    ;; The SMTP server enabled the email module to send email to external
-    ;; destinations.
-
-    ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {Enable module?} {true false} false
+[Email]
+    ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {Enable module?} {true false} true
     ;; Enable the email module
-    ; enabled = false
-
-    ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {Enable send to objects to regions not on instance?} {true false} true
-    ;; Enable sending email to regions not on current opensimulator instance. Currently does not work
-    ; enableEmailToExternalObjects = true
-
+    ; enabled = true
 
     ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {maximum number of emails from a object owner per hour} {} 500
     ; MailsFromOwnerPerHour = 500
@@ -563,17 +558,25 @@
     ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {maximum number of emails to a SMTP address per hour} {} 10
     ; MailsToSMTPAddressPerHour = 10
 
-    ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {Enable send to the world?} {true false} true
-    ;; Enable sending email to the world.
-    ; enableEmailToSMTP = true
-	
     ;# {internal_object_host} {[Startup]emailmodule:DefaultEmailModule enabled:true} {Host name to treat as internal (object to object) email?} {} lsl.opensim.local
+    ; Messages with this domain are considered grid-local
+    ; Internal messages don't use SMTP.
+    ; - If the destination exists on THIS sim, delivers directly
+    ; - If the destination exists on ANOTHER sim, delivers through IMAP
     ; internal_object_host = lsl.opensim.local
 
     ;# {host_domain_header_from} {[Startup]emailmodule:DefaultEmailModule enabled:true} {From address to use in the sent email header?} {} 127.0.0.1
     ; if the smtp service allows, the from address will be <objectUUID@host_domain_header_from>
     ; if not set SMTP_SERVER_FROM below
     ; host_domain_header_from = "127.0.0.1"
+
+    ; SMTP configuration: (off-grid mail)
+    ;; The SMTP server enabled the email module to send email to external
+    ;; destinations.
+
+    ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {Enable send to the world?} {true false} false
+    ;; Enable sending email to the world.
+    ; enableEmailToSMTP = false
 
     ;# {SMTP_SERVER_FROM} {[Startup]emailmodule:DefaultEmailModule enabled:true} {SMTP server from name?} {}
     ; some smtp servers require a known From email address or will give Error 500 - Envelope from address is not authorised
@@ -606,6 +609,38 @@
     ; SMTP_VerifyCertChain = true
     ;# {SMTP_VerifyCertNames} {[Startup]emailmodule:DefaultEmailModule enabled:true} {SMTP Verify cert chain option} {} true
     ; SMTP_VerifyCertNames = true
+
+    ; Imap configuration: (grid-local mail)
+
+    ;# {enabled} {[Startup]emailmodule:DefaultEmailModule} {Enable send to objects to regions not on instance?} {true false} false
+    ;; Enable sending email to regions not on current opensimulator instance.
+    ;; Requires a dedicated IMAP account, locally or remote
+    ; enableEmailToExternalObjects = false
+
+    ;# {IMAP_SERVER_TLS} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP use TLS?} {} false
+    ; IMAP_SERVER_TLS = false
+
+    ;# {IMAP_SERVER_HOSTNAME} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP server name?} {} 127.0.0.1
+    ; IMAP_SERVER_HOSTNAME = 127.0.0.1
+
+    ;# {IMAP_SERVER_PORT} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP server port?} {} 143
+    ; If using IMAP with TLS, it is port 993
+    ; IMAP_SERVER_PORT = 143
+
+    ;# {IMAP_SERVER_LOGIN} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP server user name?} {}
+    ; The user needs to have a Maildir folder in its homedirectory, with perms 700
+    ; This can be made with: maildirmake.courier ~/Maildir
+    ; IMAP_SERVER_LOGIN = foo
+
+    ;# {IMAP_SERVER_PASSWORD} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP server password} {}
+    ; IMAP_SERVER_PASSWORD = bar
+
+    ; using TLS and an IMAP server with a self signed certificate you will need to set next two options false
+    ;# {IMAP_VerifyCertChain} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP Verify cert chain option} {} true
+    ; IMAP_VerifyCertChain = true
+    ;# {IMAP_VerifyCertNames} {[Startup]emailmodule:DefaultEmailModule enabled:true} {IMAP Verify cert chain option} {} true
+    ; IMAP_VerifyCertNames = true
+
 
 [Network]
     ;# {ConsoleUser} {} {User name for console account} {}
