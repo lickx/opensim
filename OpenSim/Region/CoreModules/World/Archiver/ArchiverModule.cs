@@ -280,6 +280,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             ops.Add("publish", v => options["wipe-owners"] = v != null);
             ops.Add("perm=", delegate(string v) { options["checkPermissions"] = v; });
             ops.Add("all", delegate(string v) { options["all"] = v != null; });
+            ops.Add("tenant=", delegate(string v) { options["tenant"] = v; });
 
             List<string> mainParams = ops.Parse(cmdparams);
 

@@ -155,7 +155,6 @@ namespace OpenSim.Region.CoreModules.World.Archiver
             if (options.TryGetValue("checkPermissions", out Object temp))
                 FilterContent = (string)temp;
 
-
             // Find the regions to archive
             ArchiveScenesGroup scenesGroup = new ArchiveScenesGroup();
             if (MultiRegionFormat)
@@ -189,7 +188,15 @@ namespace OpenSim.Region.CoreModules.World.Archiver
                 scenesGroup.ForEachScene(delegate(Scene scene)
                 {
                     string regionDir = MultiRegionFormat ? scenesGroup.GetRegionDir(scene.RegionInfo.RegionID) : "";
-                    ArchiveOneRegion(scene, regionDir, assetUuids, failedIDs, uncertainAssetsUUIDs);
+
+                    UUID userId = scene.RegionInfo.EstateSettings.EstateOwner;
+                    if (options.TryGetValue("tenant", out Object temp))
+                    {
+                        if (!UUID.TryParse((string)temp, out userId) || userId.IsZero())
+                            userId = scene.RegionInfo.EstateSettings.EstateOwner;
+                    }
+
+                    ArchiveOneRegion(scene, regionDir, assetUuids, failedIDs, uncertainAssetsUUIDs, userId);
                 });
 
                 // Archive the assets
@@ -227,7 +234,7 @@ namespace OpenSim.Region.CoreModules.World.Archiver
         }
 
         private void ArchiveOneRegion(Scene scene, string regionDir, Dictionary<UUID, sbyte> assetUuids,
-            HashSet<UUID> failedIDs, HashSet<UUID>  uncertainAssetsUUIDs)
+            HashSet<UUID> failedIDs, HashSet<UUID>  uncertainAssetsUUIDs, UUID userId)
         {
             m_log.InfoFormat("[ARCHIVER]: Writing region {0}", scene.Name);
 
@@ -248,7 +255,12 @@ namespace OpenSim.Region.CoreModules.World.Archiver
 
                     if (!sceneObject.IsDeleted && !sceneObject.IsAttachment && !sceneObject.IsTemporary && !sceneObject.inTransit)
                     {
-                        if (!CanUserArchiveObject(scene.RegionInfo.EstateSettings.EstateOwner, sceneObject, FilterContent, permissionsModule))
+                        if (userId != scene.RegionInfo.EstateSettings.EstateOwner && sceneObject.OwnerID != userId)
+                        {
+                            // A tenant= option was specified, skip object if not owned by tenant with userid
+                            ++numObjectsSkippedPermissions;
+                        }
+                        else if (!CanUserArchiveObject(userId, sceneObject, FilterContent, permissionsModule))
                         {
                             // The user isn't allowed to copy/transfer this object, so it will not be included in the OAR.
                             ++numObjectsSkippedPermissions;
