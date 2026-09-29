@@ -181,8 +181,14 @@ namespace OpenSim.Data.MySQL
                 dbcon.Open();
                 using (MySqlCommand cmd =
                     new MySqlCommand(
-                        "replace INTO assets(id, name, description, assetType, local, temporary, create_time, access_time, asset_flags, CreatorID, data)" +
-                        "VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?asset_flags, ?CreatorID, ?data)",
+                        "INSERT INTO assets (id, name, description, assetType, local, temporary, create_time, access_time, asset_flags, CreatorID, data)" +
+                        "VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?asset_flags, ?CreatorID, ?data) " +
+                        "ON DUPLICATE KEY UPDATE " +
+                        "name=VALUES(name), description=VALUES(description), " +
+                        "assetType=VALUES(assetType), local=VALUES(local), " +
+                        "temporary=VALUES(temporary), create_time=VALUES(create_time), " +
+                        "access_time=VALUES(access_time), asset_flags=VALUES(asset_flags), " +
+                        "CreatorID=VALUES(CreatorID), data=VALUES(data)",
                         dbcon))
                 {
                     try

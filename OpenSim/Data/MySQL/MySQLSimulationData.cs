@@ -132,7 +132,7 @@ namespace OpenSim.Data.MySQL
                         {
                             cmd.Parameters.Clear();
 
-                            cmd.CommandText = "replace into prims (" +
+                            cmd.CommandText = "INSERT INTO prims (" +
                                     "UUID, CreationDate, " +
                                     "Name, Text, Description, " +
                                     "SitName, TouchName, ObjectFlags, " +
@@ -172,14 +172,14 @@ namespace OpenSim.Data.MySQL
                                     "Friction, Restitution, Vehicle, PhysInertia, DynAttrs, " +
                                     "RotationAxisLocks, sopanims, sitactrange, pseudocrc, " +
                                     "lnkstBinData, StartStr" +
-                                    ") values (" + "?UUID, " +
+                                    ") VALUES (" + "?UUID, " +
                                     "?CreationDate, ?Name, ?Text, " +
                                     "?Description, ?SitName, ?TouchName, " +
                                     "?ObjectFlags, ?OwnerMask, ?NextOwnerMask, " +
                                     "?GroupMask, ?EveryoneMask, ?BaseMask, " +
                                     "?PositionX, ?PositionY, ?PositionZ, " +
                                     "?GroupPositionX, ?GroupPositionY, ?GroupPositionZ, " +
-                                    "?VelocityX, ?VelocityY, ?VelocityZ, "+
+                                    "?VelocityX, ?VelocityY, ?VelocityZ, " +
                                     "?AngularVelocityX, ?AngularVelocityY, ?AngularVelocityZ, " +
                                     "?AccelerationX, ?AccelerationY, ?AccelerationZ, " +
                                     "?standtargetx, ?standtargety, ?standtargetz, " +
@@ -207,7 +207,43 @@ namespace OpenSim.Data.MySQL
                                     "?PhysicsShapeType, ?Density, ?GravityModifier, " +
                                     "?Friction, ?Restitution, ?Vehicle, ?PhysInertia, ?DynAttrs, " +
                                     "?RotationAxisLocks, ?sopanims, ?sitactrange, ?pseudocrc, " +
-                                    "?lnkstBinData, ?StartStr)";
+                                    "?lnkstBinData, ?StartStr) " +
+                                    "ON DUPLICATE KEY UPDATE " +
+                                    "CreationDate=VALUES(CreationDate), Name=VALUES(Name), Text=VALUES(Text), " +
+                                    "Description=VALUES(Description), SitName=VALUES(SitName), TouchName=VALUES(TouchName), " +
+                                    "ObjectFlags=VALUES(ObjectFlags), OwnerMask=VALUES(OwnerMask), NextOwnerMask=VALUES(NextOwnerMask), " +
+                                    "GroupMask=VALUES(GroupMask), EveryoneMask=VALUES(EveryoneMask), BaseMask=VALUES(BaseMask), " +
+                                    "PositionX=VALUES(PositionX), PositionY=VALUES(PositionY), PositionZ=VALUES(PositionZ), " +
+                                    "GroupPositionX=VALUES(GroupPositionX), GroupPositionY=VALUES(GroupPositionY), GroupPositionZ=VALUES(GroupPositionZ), " +
+                                    "VelocityX=VALUES(VelocityX), VelocityY=VALUES(VelocityY), VelocityZ=VALUES(VelocityZ), " +
+                                    "AngularVelocityX=VALUES(AngularVelocityX), AngularVelocityY=VALUES(AngularVelocityY), AngularVelocityZ=VALUES(AngularVelocityZ), " +
+                                    "AccelerationX=VALUES(AccelerationX), AccelerationY=VALUES(AccelerationY), AccelerationZ=VALUES(AccelerationZ), " +
+                                    "standtargetx=VALUES(standtargetx), standtargety=VALUES(standtargety), standtargetz=VALUES(standtargetz), " +
+                                    "RotationX=VALUES(RotationX), RotationY=VALUES(RotationY), RotationZ=VALUES(RotationZ), " +
+                                    "RotationW=VALUES(RotationW), SitTargetOffsetX=VALUES(SitTargetOffsetX), " +
+                                    "SitTargetOffsetY=VALUES(SitTargetOffsetY), SitTargetOffsetZ=VALUES(SitTargetOffsetZ), " +
+                                    "SitTargetOrientW=VALUES(SitTargetOrientW), SitTargetOrientX=VALUES(SitTargetOrientX), " +
+                                    "SitTargetOrientY=VALUES(SitTargetOrientY), SitTargetOrientZ=VALUES(SitTargetOrientZ), " +
+                                    "RegionUUID=VALUES(RegionUUID), CreatorID=VALUES(CreatorID), OwnerID=VALUES(OwnerID), " +
+                                    "GroupID=VALUES(GroupID), LastOwnerID=VALUES(LastOwnerID), RezzerID=VALUES(RezzerID), SceneGroupID=VALUES(SceneGroupID), " +
+                                    "PayPrice=VALUES(PayPrice), PayButton1=VALUES(PayButton1), PayButton2=VALUES(PayButton2), " +
+                                    "PayButton3=VALUES(PayButton3), PayButton4=VALUES(PayButton4), LoopedSound=VALUES(LoopedSound), " +
+                                    "LoopedSoundGain=VALUES(LoopedSoundGain), TextureAnimation=VALUES(TextureAnimation), " +
+                                    "CameraEyeOffsetX=VALUES(CameraEyeOffsetX), CameraEyeOffsetY=VALUES(CameraEyeOffsetY), " +
+                                    "CameraEyeOffsetZ=VALUES(CameraEyeOffsetZ), CameraAtOffsetX=VALUES(CameraAtOffsetX), " +
+                                    "CameraAtOffsetY=VALUES(CameraAtOffsetY), CameraAtOffsetZ=VALUES(CameraAtOffsetZ), " +
+                                    "ForceMouselook=VALUES(ForceMouselook), ScriptAccessPin=VALUES(ScriptAccessPin), " +
+                                    "AllowedDrop=VALUES(AllowedDrop), DieAtEdge=VALUES(DieAtEdge), SalePrice=VALUES(SalePrice), " +
+                                    "SaleType=VALUES(SaleType), ColorR=VALUES(ColorR), ColorG=VALUES(ColorG), " +
+                                    "ColorB=VALUES(ColorB), ColorA=VALUES(ColorA), ParticleSystem=VALUES(ParticleSystem), " +
+                                    "ClickAction=VALUES(ClickAction), Material=VALUES(Material), CollisionSound=VALUES(CollisionSound), " +
+                                    "CollisionSoundVolume=VALUES(CollisionSoundVolume), PassTouches=VALUES(PassTouches), PassCollisions=VALUES(PassCollisions), " +
+                                    "LinkNumber=VALUES(LinkNumber), MediaURL=VALUES(MediaURL), KeyframeMotion=VALUES(KeyframeMotion), AttachedPosX=VALUES(AttachedPosX), " +
+                                    "AttachedPosY=VALUES(AttachedPosY), AttachedPosZ=VALUES(AttachedPosZ), " +
+                                    "PhysicsShapeType=VALUES(PhysicsShapeType), Density=VALUES(Density), GravityModifier=VALUES(GravityModifier), " +
+                                    "Friction=VALUES(Friction), Restitution=VALUES(Restitution), Vehicle=VALUES(Vehicle), PhysInertia=VALUES(PhysInertia), DynAttrs=VALUES(DynAttrs), " +
+                                    "RotationAxisLocks=VALUES(RotationAxisLocks), sopanims=VALUES(sopanims), sitactrange=VALUES(sitactrange), pseudocrc=VALUES(pseudocrc), " +
+                                    "lnkstBinData=VALUES(lnkstBinData), StartStr=VALUES(StartStr)";
 
                             FillPrimCommand(cmd, prim, obj.UUID, regionUUID);
 
@@ -215,7 +251,7 @@ namespace OpenSim.Data.MySQL
 
                             cmd.Parameters.Clear();
 
-                            cmd.CommandText = "replace into primshapes (" +
+                            cmd.CommandText = "INSERT INTO primshapes (" +
                                     "UUID, Shape, ScaleX, ScaleY, " +
                                     "ScaleZ, PCode, PathBegin, PathEnd, " +
                                     "PathScaleX, PathScaleY, PathShearX, " +
@@ -225,7 +261,7 @@ namespace OpenSim.Data.MySQL
                                     "PathTwistBegin, ProfileBegin, ProfileEnd, " +
                                     "ProfileCurve, ProfileHollow, Texture, " +
                                     "ExtraParams, State, LastAttachPoint, Media, MatOvrd) " +
-                                    "values (?UUID, " +
+                                    "VALUES (?UUID, " +
                                     "?Shape, ?ScaleX, ?ScaleY, ?ScaleZ, " +
                                     "?PCode, ?PathBegin, ?PathEnd, " +
                                     "?PathScaleX, ?PathScaleY, " +
@@ -236,7 +272,17 @@ namespace OpenSim.Data.MySQL
                                     "?PathTwistBegin, ?ProfileBegin, " +
                                     "?ProfileEnd, ?ProfileCurve, " +
                                     "?ProfileHollow, ?Texture, ?ExtraParams, " +
-                                    "?State, ?LastAttachPoint, ?Media, ?MatOvrd)";
+                                    "?State, ?LastAttachPoint, ?Media, ?MatOvrd) " +
+                                    "ON DUPLICATE KEY UPDATE " +
+                                    "Shape=VALUES(Shape), ScaleX=VALUES(ScaleX), ScaleY=VALUES(ScaleY), " +
+                                    "ScaleZ=VALUES(ScaleZ), PCode=VALUES(PCode), PathBegin=VALUES(PathBegin), PathEnd=VALUES(PathEnd), " +
+                                    "PathScaleX=VALUES(PathScaleX), PathScaleY=VALUES(PathScaleY), PathShearX=VALUES(PathShearX), " +
+                                    "PathShearY=VALUES(PathShearY), PathSkew=VALUES(PathSkew), PathCurve=VALUES(PathCurve), " +
+                                    "PathRadiusOffset=VALUES(PathRadiusOffset), PathRevolutions=VALUES(PathRevolutions), " +
+                                    "PathTaperX=VALUES(PathTaperX), PathTaperY=VALUES(PathTaperY), PathTwist=VALUES(PathTwist), " +
+                                    "PathTwistBegin=VALUES(PathTwistBegin), ProfileBegin=VALUES(ProfileBegin), ProfileEnd=VALUES(ProfileEnd), " +
+                                    "ProfileCurve=VALUES(ProfileCurve), ProfileHollow=VALUES(ProfileHollow), Texture=VALUES(Texture), " +
+                                    "ExtraParams=VALUES(ExtraParams), State=VALUES(State), LastAttachPoint=VALUES(LastAttachPoint), Media=VALUES(Media), MatOvrd=VALUES(MatOvrd)";
 
                             FillShapeCommand(cmd, prim);
 
@@ -716,7 +762,7 @@ namespace OpenSim.Data.MySQL
 
                     using (MySqlCommand cmd = dbcon.CreateCommand())
                     {
-                        cmd.CommandText = "replace into land (UUID, RegionUUID, " +
+                        cmd.CommandText = "INSERT INTO land (UUID, RegionUUID, " +
                             "LocalLandID, Bitmap, Name, Description, " +
                             "OwnerUUID, IsGroupOwned, Area, AuctionID, " +
                             "Category, ClaimDate, ClaimPrice, GroupUUID, " +
@@ -727,7 +773,8 @@ namespace OpenSim.Data.MySQL
                             "UserLookAtX, UserLookAtY, UserLookAtZ, " +
                             "AuthbuyerID, OtherCleanTime, Dwell, MediaType, MediaDescription, " +
                             "MediaSize, MediaLoop, ObscureMusic, ObscureMedia, " +
-                            "SeeAVs, AnyAVSounds, GroupAVSounds, environment) values (" +
+                            "SeeAVs, AnyAVSounds, GroupAVSounds, environment) " +
+                            "VALUES (" +
                             "?UUID, ?RegionUUID, " +
                             "?LocalLandID, ?Bitmap, ?Name, ?Description, " +
                             "?OwnerUUID, ?IsGroupOwned, ?Area, ?AuctionID, " +
@@ -739,7 +786,20 @@ namespace OpenSim.Data.MySQL
                             "?UserLookAtX, ?UserLookAtY, ?UserLookAtZ, " +
                             "?AuthbuyerID, ?OtherCleanTime, ?Dwell, ?MediaType, ?MediaDescription, "+
                             "CONCAT(?MediaWidth, ',', ?MediaHeight), ?MediaLoop, ?ObscureMusic, ?ObscureMedia, " +
-                            "?SeeAVs, ?AnyAVSounds, ?GroupAVSounds, ?environment)";
+                            "?SeeAVs, ?AnyAVSounds, ?GroupAVSounds, ?environment) " +
+                            "ON DUPLICATE KEY UPDATE " +
+                            "RegionUUID=VALUES(RegionUUID), LocalLandID=VALUES(LocalLandID), " +
+                            "Bitmap=VALUES(Bitmap), Name=VALUES(Name), Description=VALUES(Description), " +
+                            "OwnerUUID=VALUES(OwnerUUID), IsGroupOwned=VALUES(IsGroupOwned), Area=VALUES(Area), AuctionID=VALUES(AuctionID), " +
+                            "Category=VALUES(Category), ClaimDate=VALUES(ClaimDate), ClaimPrice=VALUES(ClaimPrice), GroupUUID=VALUES(GroupUUID), " +
+                            "SalePrice=VALUES(SalePrice), LandStatus=VALUES(LandStatus), LandFlags=VALUES(LandFlags), LandingType=VALUES(LandingType), " +
+                            "MediaAutoScale=VALUES(MediaAutoScale), MediaTextureUUID=VALUES(MediaTextureUUID), MediaURL=VALUES(MediaURL), " +
+                            "MusicURL=VALUES(MusicURL), PassHours=VALUES(PassHours), PassPrice=VALUES(PassPrice), SnapshotUUID=VALUES(SnapshotUUID), " +
+                            "UserLocationX=VALUES(UserLocationX), UserLocationY=VALUES(UserLocationY), UserLocationZ=VALUES(UserLocationZ), " +
+                            "UserLookAtX=VALUES(UserLookAtX), UserLookAtY=VALUES(UserLookAtY), UserLookAtZ=VALUES(UserLookAtZ), " +
+                            "AuthbuyerID=VALUES(AuthbuyerID), OtherCleanTime=VALUES(OtherCleanTime), Dwell=VALUES(Dwell), MediaType=VALUES(MediaType), MediaDescription=VALUES(MediaDescription), " +
+                            "MediaSize=VALUES(MediaSize), MediaLoop=VALUES(MediaLoop), ObscureMusic=VALUES(ObscureMusic), ObscureMedia=VALUES(ObscureMedia), " +
+                            "SeeAVs=VALUES(SeeAVs), AnyAVSounds=VALUES(AnyAVSounds), GroupAVSounds=VALUES(GroupAVSounds), environment=VALUES(environment)";
 
                         FillLandCommand(cmd, parcel.LandData, parcel.RegionUUID);
 
@@ -852,7 +912,7 @@ namespace OpenSim.Data.MySQL
 
                 using (MySqlCommand cmd = dbcon.CreateCommand())
                 {
-                    cmd.CommandText = "REPLACE INTO `regionenvironment` (`region_id`, `llsd_settings`) VALUES (?region_id, ?llsd_settings)";
+                    cmd.CommandText = "INSERT INTO `regionenvironment` (`region_id`, `llsd_settings`) VALUES (?region_id, ?llsd_settings) ON DUPLICATE KEY UPDATE llsd_settings=VALUES(llsd_settings)";
 
                     cmd.Parameters.AddWithValue("region_id", regionUUID.ToString());
                     cmd.Parameters.AddWithValue("llsd_settings", settings);
@@ -888,7 +948,7 @@ namespace OpenSim.Data.MySQL
 
                 using (MySqlCommand cmd = dbcon.CreateCommand())
                 {
-                    cmd.CommandText = "replace into regionsettings (regionUUID, " +
+                    cmd.CommandText = "INSERT INTO regionsettings (regionUUID, " +
                          "block_terraform, block_fly, allow_damage, " +
                          "restrict_pushing, allow_land_resell, " +
                          "allow_land_join_divide, block_show_in_search, " +
@@ -907,8 +967,8 @@ namespace OpenSim.Data.MySQL
                          "sunvectorz, loaded_creation_datetime, " +
                          "loaded_creation_id, map_tile_ID, block_search, casino, " +
                          "TelehubObject, parcel_tile_ID, cacheID, " +
-                         "TerrainPBR1, TerrainPBR2, TerrainPBR3, TerrainPBR4)" +
-                          "values (?RegionUUID, ?BlockTerraform, " +
+                         "TerrainPBR1, TerrainPBR2, TerrainPBR3, TerrainPBR4) " +
+                         "VALUES (?RegionUUID, ?BlockTerraform, " +
                          "?BlockFly, ?AllowDamage, ?RestrictPushing, " +
                          "?AllowLandResell, ?AllowLandJoinDivide, " +
                          "?BlockShowInSearch, ?AgentLimit, ?ObjectBonus, " +
@@ -925,7 +985,27 @@ namespace OpenSim.Data.MySQL
                          "?loaded_creation_datetime, ?loaded_creation_id, " +
                          "?map_tile_ID, ?block_search, ?casino, " +
                          "?TelehubObject, ?parcel_tile_ID, ?cacheID, " +
-                         "?TerrainPBR1, ?TerrainPBR2, ?TerrainPBR3, ?TerrainPBR4)";
+                         "?TerrainPBR1, ?TerrainPBR2, ?TerrainPBR3, ?TerrainPBR4) " +
+                         "ON DUPLICATE KEY UPDATE " +
+                         "block_terraform=VALUES(block_terraform), block_fly=VALUES(block_fly), allow_damage=VALUES(allow_damage), " +
+                         "restrict_pushing=VALUES(restrict_pushing), allow_land_resell=VALUES(allow_land_resell), " +
+                         "allow_land_join_divide=VALUES(allow_land_join_divide), block_show_in_search=VALUES(block_show_in_search), " +
+                         "agent_limit=VALUES(agent_limit), object_bonus=VALUES(object_bonus), maturity=VALUES(maturity), " +
+                         "disable_scripts=VALUES(disable_scripts), disable_collisions=VALUES(disable_collisions), " +
+                         "disable_physics=VALUES(disable_physics), terrain_texture_1=VALUES(terrain_texture_1), " +
+                         "terrain_texture_2=VALUES(terrain_texture_2), terrain_texture_3=VALUES(terrain_texture_3), " +
+                         "terrain_texture_4=VALUES(terrain_texture_4), elevation_1_nw=VALUES(elevation_1_nw), " +
+                         "elevation_2_nw=VALUES(elevation_2_nw), elevation_1_ne=VALUES(elevation_1_ne), " +
+                         "elevation_2_ne=VALUES(elevation_2_ne), elevation_1_se=VALUES(elevation_1_se), " +
+                         "elevation_2_se=VALUES(elevation_2_se), elevation_1_sw=VALUES(elevation_1_sw), " +
+                         "elevation_2_sw=VALUES(elevation_2_sw), water_height=VALUES(water_height), " +
+                         "terrain_raise_limit=VALUES(terrain_raise_limit), terrain_lower_limit=VALUES(terrain_lower_limit), " +
+                         "use_estate_sun=VALUES(use_estate_sun), fixed_sun=VALUES(fixed_sun), sun_position=VALUES(sun_position), " +
+                         "covenant=VALUES(covenant), covenant_datetime=VALUES(covenant_datetime), Sandbox=VALUES(Sandbox), sunvectorx=VALUES(sunvectorx), sunvectory=VALUES(sunvectory), " +
+                         "sunvectorz=VALUES(sunvectorz), loaded_creation_datetime=VALUES(loaded_creation_datetime), " +
+                         "loaded_creation_id=VALUES(loaded_creation_id), map_tile_ID=VALUES(map_tile_ID), block_search=VALUES(block_search), casino=VALUES(casino), " +
+                         "TelehubObject=VALUES(TelehubObject), parcel_tile_ID=VALUES(parcel_tile_ID), cacheID=VALUES(cacheID), " +
+                         "TerrainPBR1=VALUES(TerrainPBR1), TerrainPBR2=VALUES(TerrainPBR2), TerrainPBR3=VALUES(TerrainPBR3), TerrainPBR4=VALUES(TerrainPBR4)";
 
                     FillRegionSettingsCommand(cmd, rs);
                     ExecuteNonQuery(cmd);
@@ -2066,7 +2146,7 @@ namespace OpenSim.Data.MySQL
 
                 using (MySqlCommand cmd = dbcon.CreateCommand())
                 {
-                    cmd.CommandText = "replace into regionextra values (?RegionID, ?Name, ?value)";
+                    cmd.CommandText = "INSERT INTO regionextra VALUES (?RegionID, ?Name, ?value) ON DUPLICATE KEY UPDATE Name=VALUES(Name), value=VALUES(value)";
                     cmd.Parameters.AddWithValue("?RegionID", regionID.ToString());
                     cmd.Parameters.AddWithValue("?Name", name);
                     cmd.Parameters.AddWithValue("?value", val);

@@ -444,7 +444,7 @@ namespace OpenSim.Data.MySQL
         public void addInventoryItem(InventoryItemBase item)
         {
             string sql =
-                "REPLACE INTO inventoryitems (inventoryID, assetID, assetType, parentFolderID, avatarID, inventoryName"
+                "INSERT INTO inventoryitems (inventoryID, assetID, assetType, parentFolderID, avatarID, inventoryName"
                     + ", inventoryDescription, inventoryNextPermissions, inventoryCurrentPermissions, invType"
                     + ", creatorID, inventoryBasePermissions, inventoryEveryOnePermissions, inventoryGroupPermissions, salePrice, saleType"
                     + ", creationDate, groupID, groupOwned, flags) VALUES ";
@@ -452,7 +452,17 @@ namespace OpenSim.Data.MySQL
                 "(?inventoryID, ?assetID, ?assetType, ?parentFolderID, ?avatarID, ?inventoryName, ?inventoryDescription"
                     + ", ?inventoryNextPermissions, ?inventoryCurrentPermissions, ?invType, ?creatorID"
                     + ", ?inventoryBasePermissions, ?inventoryEveryOnePermissions, ?inventoryGroupPermissions, ?salePrice, ?saleType, ?creationDate"
-                    + ", ?groupID, ?groupOwned, ?flags)";
+                    + ", ?groupID, ?groupOwned, ?flags) ";
+            sql +=
+                "ON DUPLICATE KEY UPDATE " +
+                "assetID=VALUES(assetID), assetType=VALUES(assetType)"
+                    + ", parentFolderID=VALUES(parentFolderID), avatarID=VALUES(avatarID), inventoryName=VALUES(inventoryName)"
+                    + ", inventoryDescription=VALUES(inventoryDescription), inventoryNextPermissions=VALUES(inventoryNextPermissions)"
+                    + ", inventoryCurrentPermissions=VALUES(inventoryCurrentPermissions), invType=VALUES(invType)"
+                    + ", creatorID=VALUES(creatorID), inventoryBasePermissions=VALUES(inventoryBasePermissions)"
+                    + ", inventoryEveryOnePermissions=VALUES(inventoryEveryOnePermissions), inventoryGroupPermissions=VALUES(inventoryGroupPermissions)"
+                    + ", salePrice=VALUES(salePrice), saleType=VALUES(saleType), creationDate=VALUES(creationDate)"
+                    + ", groupID=VALUES(groupID), groupOwned=VALUES(groupOwned), flags=VALUES(flags)";
 
             string itemName = item.Name;
             if (item.Name.Length > 64)
@@ -574,8 +584,9 @@ namespace OpenSim.Data.MySQL
         public void addInventoryFolder(InventoryFolderBase folder)
         {
             string sql =
-                "REPLACE INTO inventoryfolders (folderID, agentID, parentFolderID, folderName, type, version) VALUES ";
-            sql += "(?folderID, ?agentID, ?parentFolderID, ?folderName, ?type, ?version)";
+                "INSERT INTO inventoryfolders (folderID, agentID, parentFolderID, folderName, type, version) VALUES ";
+            sql += "(?folderID, ?agentID, ?parentFolderID, ?folderName, ?type, ?version) ";
+            sql += "ON DUPLICATE KEY UPDATE agentID=VALUES(agentID), parentFolderID=VALUES(parentFolderID), folderName=VALUES(folderName), type=VALUES(type), version=VALUES(version)";
 
             string folderName = folder.Name;
             if (folderName.Length > 64)
