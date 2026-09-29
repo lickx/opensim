@@ -395,6 +395,15 @@
     ;;
     ; DeniedClients = ""
 
+    ; BuggedClients are problematic/bugged official viewers
+    BuggedClients = "Firestorm-Release(x64)? +4.7.7.48706|Firestorm-Release(x64)? +6.6.8.68380|Firestorm-Release(x64)? +6.6.16.70339|Firestorm-Releasex64 +7.1.9.74745"
+    ; CopybotClients are copybots impersonating (usually very old) legit viewers
+    CopybotClients = "Firestorm-Release(x64)? +6.2.0|Firestorm-Release(x64)? +4.6.8.42696|Firestorm-Release(x64)? +6.3.2.58086|Firestorm-Release(x64)? +6.3.8.58105|Firestorm-Release(x64)? +6.4.13.63251|Firestorm-Release(x64)? +6.4.23.64823|Singularity Alpha( 64)? +1.8.7.7610"
+    ; The + is needed for parsing by older OpenSim versions (<0.9.3.1),
+    ; after the space before the version (it means 'one or more spaces')
+    ; To deny these BuggedClients and CopybotClients, uncomment the next line:
+    ;DeniedClients = "${AccessControl|BuggedClients}|${AccessControl|CopybotClients}"
+
 
 [Map]
     ;# {GenerateMaptiles} {} {Generate map tiles?} {true false} true
