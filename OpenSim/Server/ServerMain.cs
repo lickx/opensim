@@ -32,6 +32,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Security;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Collections.Generic;
 using OpenSim.Framework;
@@ -50,6 +51,7 @@ namespace OpenSim.Server
         protected static List<IServiceConnector> m_ServiceConnectors = new();
 
         protected static PluginLoader loader;
+        private static PosixSignalRegistration m_signalReg;
         private static bool m_NoVerifyCertChain = false;
         private static bool m_NoVerifyCertHostname = false;
 
@@ -94,6 +96,13 @@ namespace OpenSim.Server
         {
             Culture.SetCurrentCulture();
             Culture.SetDefaultCurrentCulture();
+
+            m_signalReg = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+                    {
+                        m_log.Info("Received SIGTERM, shutting down");
+                        m_Server?.Shutdown();
+                        Util.StopThreadPool();
+                    });
 
             ServicePointManager.DefaultConnectionLimit = 64;
             ServicePointManager.MaxServicePointIdleTime = 30000;
