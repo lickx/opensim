@@ -10814,8 +10814,8 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
 
                             float repeatX = Math.Clamp((float)mnrepeat.x,-100.0f, 100.0f);
                             float repeatY = Math.Clamp((float)mnrepeat.y,-100.0f, 100.0f);
-                            float offsetX = Math.Clamp((float)mnoffset.x, 0f, 1.0f);
-                            float offsetY = Math.Clamp((float)mnoffset.y, 0f, 1.0f);
+                            float offsetX = Math.Clamp((float)mnoffset.x, -1.0f, 1.0f);
+                            float offsetY = Math.Clamp((float)mnoffset.y, -1.0f, 1.0f);
 
                             materialChanged |= SetMaterialNormalMap(part, face, mapID, repeatX, repeatY, offsetX, offsetY, mnrot);
                             break;
