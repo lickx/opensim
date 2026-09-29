@@ -92,7 +92,7 @@ namespace OpenSim.Data.PGSQL
             }
             else
             {
-                pattern = " \"ShowInList\" = 1 AND lower(\"Name\") LIKE lower('%" + pattern + "%')";
+                pattern = " \"ShowInList\" = 1 AND \"Name\" ILIKE '%" + pattern + "%'";
 
                 return m_Groups.Get(pattern, new NpgsqlParameter("pattern", pattern));
             }
