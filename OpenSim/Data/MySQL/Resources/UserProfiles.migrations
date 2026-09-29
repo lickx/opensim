@@ -84,3 +84,24 @@ CREATE TABLE IF NOT EXISTS `usersettings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 commit;
+
+
+:VERSION 6         # Unicode profiles
+
+ALTER TABLE classifieds CONVERT TO CHARACTER SET utf8;
+ALTER TABLE usernotes CONVERT TO CHARACTER SET utf8;
+ALTER TABLE userpicks CONVERT TO CHARACTER SET utf8;
+ALTER TABLE userprofile CONVERT TO CHARACTER SET utf8;
+ALTER TABLE userdata CONVERT TO CHARACTER SET utf8;
+
+commit;
+
+:VERSION 7         # Support smileys and other 4 bytes per character symbols
+
+ALTER TABLE classifieds CONVERT TO CHARACTER SET utf8mb4;
+ALTER TABLE usernotes CONVERT TO CHARACTER SET utf8mb4;
+ALTER TABLE userpicks CONVERT TO CHARACTER SET utf8mb4;
+ALTER TABLE userprofile CONVERT TO CHARACTER SET utf8mb4;
+ALTER TABLE userdata CONVERT TO CHARACTER SET utf8mb4;
+
+commit;
