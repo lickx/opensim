@@ -1858,6 +1858,14 @@
   <key>value</key><string>0x2</string>
   <key>tooltip</key><string>osTeleportObject flag: stop at jump point if tp fails</string>
  </map>
+ <key>PAYMENT_INFO_ON_FILE</key><map>
+  <key>type</key><string>integer</string>
+  <key>value</key><string>1</string>
+ </map>
+ <key>PAYMENT_INFO_USED</key><map>
+  <key>type</key><string>integer</string>
+  <key>value</key><string>2</string>
+ </map>
  <key>PARCEL_COUNT_GROUP</key><map>
   <key>type</key><string>integer</string>
   <key>value</key><string>2</string>

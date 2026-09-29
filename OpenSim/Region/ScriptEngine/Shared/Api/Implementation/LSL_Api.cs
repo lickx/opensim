@@ -5241,7 +5241,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
                             }
                             else
                             {
-                                if (data == 7)
+                                if (data == 7 || data == 8)
                                     reply = "0";
                             }
                             break;

@@ -1121,5 +1121,10 @@ namespace OpenSim.Region.ScriptEngine.Shared.ScriptBase
         public const int BEACON_MAP  = 0x1;
         public const int BEACON_SHOW_MAP  = 0x1;
         public const int BEACON_FOCUS_MAP = 0x2;
+
+        // returned by llRequestAgentData
+        public const int PAYMENT_INFO_ON_FILE = 1;
+        public const int PAYMENT_INFO_USED = 2;
+
     }
 }
