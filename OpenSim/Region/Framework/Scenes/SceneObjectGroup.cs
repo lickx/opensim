@@ -2001,7 +2001,7 @@ namespace OpenSim.Region.Framework.Scenes
             ApplyPhysics();
 
             HasGroupChanged = true;
-            RootPart.Rezzed = DateTime.Now;
+            RootPart.Rezzed = DateTime.UtcNow;
             RootPart.RemFlag(PrimFlags.TemporaryOnRez);
             AttachToBackup();
             m_scene.EventManager.TriggerParcelPrimCountTainted();

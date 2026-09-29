@@ -874,7 +874,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Attachments
 
                 so.ApplyPhysics();
 
-                rootPart.Rezzed = DateTime.Now;
+                rootPart.Rezzed = DateTime.UtcNow;
                 so.AttachToBackup();
                 m_scene.EventManager.TriggerParcelPrimCountTainted();
 
