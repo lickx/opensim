@@ -1075,7 +1075,7 @@ namespace OpenSim.Region.Framework.Scenes
 
         // velocities
         private const float AgentControlStopSlowVel = 0.2f * 4.096f;
-        public const float AgentControlMidVel = 0.6f * 4.096f;
+        public const float AgentControlMidVel = 1.0f * 4.096f;
         public const float AgentControlNormalVel = 1.0f * 4.096f;
 
         // old normal speed was tuned to match sl normal plus Fast modifiers
