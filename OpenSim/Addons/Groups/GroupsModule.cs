@@ -706,6 +706,23 @@ namespace OpenSim.Groups
 
             m_groupData.SetAgentActiveGroup(GetRequestingAgentIDStr(remoteClient), GetRequestingAgentIDStr(remoteClient), groupID);
 
+            ScenePresence sp = ((Scene)(remoteClient.Scene)).GetScenePresence(remoteClient.AgentId);
+            List<SceneObjectGroup> attachments = sp.GetAttachments();
+
+            foreach(SceneObjectGroup so in attachments)
+            {
+                // Set attachments to group and resume scripts if needed,
+                // for instance on land that only allows scripts from
+                // groupmembers
+                so.SetGroup(groupID, remoteClient);
+                if (so.ContainsScripts() && so.RunningScriptCount() == 0)
+                {
+                    so.RootPart.ParentGroup.CreateScriptInstances(
+                        0, false, sp.Scene.DefaultScriptEngine, sp.GetStateSource());
+                    so.ResumeScripts();
+                }
+            }
+
             // Changing active group changes title, active powers, all kinds of things
             // anyone who is in any region that can see this client, should probably be
             // updated with new group info.  At a minimum, they should get ScenePresence
@@ -981,11 +998,16 @@ namespace OpenSim.Groups
         {
             if (m_debugEnabled) m_log.DebugFormat("[Groups]: {0} called", System.Reflection.MethodBase.GetCurrentMethod().Name);
 
-            m_groupData.SetAgentActiveGroupRole(GetRequestingAgentIDStr(remoteClient), GetRequestingAgentIDStr(remoteClient), groupID, titleRoleID);
+            UUID agentID = remoteClient.AgentId;
+            m_groupData.SetAgentActiveGroupRole(agentID.ToString(), agentID.ToString(), groupID, titleRoleID);
 
-            // TODO: Not sure what all is needed here, but if the active group role change is for the group
-            // the client currently has set active, then we need to do a scene presence update too
-            // if (m_groupData.GetAgentActiveMembership(GetRequestingAgentID(remoteClient)).GroupID == GroupID)
+            // If the active group role change is for the group
+            // the client currently has set active, then we need to
+            // set the active group again for the tag to update
+            if (m_groupData.GetAgentActiveMembership(agentID.ToString(), agentID.ToString()).GroupID == groupID)
+            {
+                m_groupData.SetAgentActiveGroup(agentID.ToString(), agentID.ToString(), groupID);
+            }
 
             SendDataUpdate(remoteClient, true);
         }
