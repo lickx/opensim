@@ -559,6 +559,8 @@
 
 
 [GridInfoService]
+    GridService = "OpenSim.Services.GridService.dll:GridService"
+
     ; These settings are used to return information on a get_grid_info call.
     ; Client launcher scripts and third-party clients make use of this to
     ; autoconfigure the client and to provide a nice user experience. If you

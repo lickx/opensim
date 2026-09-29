@@ -89,12 +89,13 @@ namespace OpenSim.Server.Handlers.Grid
             if (stats_available)
             {
                 stats_available = false;
-                string gridService = m_Config.Configs["GridService"].GetString("LocalServiceModule", string.Empty);
-                if(!string.IsNullOrEmpty(gridService))
+                string gridService = gridCfg.GetString("GridService", string.Empty);
+                if (!string.IsNullOrWhiteSpace(gridService))
                 {
-                    m_GridService = ServerUtils.LoadPlugin<IGridService>(gridService, [m_Config]);
-                    if(m_GridService != null)
-                    { 
+                    object[] args = new object[] { configSource };
+                    m_GridService = ServerUtils.LoadPlugin<IGridService>(gridService, args);
+                    if (m_GridService != null)
+                    {
                         IConfig dbConfig = configSource.Configs["DatabaseService"];
                         if (dbConfig is not null)
                         {
@@ -282,7 +283,7 @@ namespace OpenSim.Server.Handlers.Grid
             try
             {
                 // Fetch region data
-                if(m_GridService is not null)
+                if (m_GridService is not null)
                 {
                     List<GridRegion> regions = m_GridService.GetOnlineRegions(UUID.Zero, 0, 0, int.MaxValue);
                     foreach (GridRegion region in regions)
