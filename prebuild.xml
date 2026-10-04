@@ -1990,6 +1990,35 @@
 
     </Project>
 
+    <Project name="OpenSimSearch.Modules" path="OpenSim/Addons/Search" type="Library">
+      <Configuration name="Debug">
+        <Options>
+          <OutputPath>../../../bin/</OutputPath>
+        </Options>
+      </Configuration>
+      <Configuration name="Release">
+        <Options>
+          <OutputPath>../../../bin/</OutputPath>
+        </Options>
+      </Configuration>
+
+      <ReferencePath>../../../bin/</ReferencePath>
+      <Reference name="OpenMetaverseTypes"/>
+      <Reference name="OpenMetaverse"/>
+      <Reference name="OpenSim.Framework"/>
+      <Reference name="OpenSim.Region.Framework"/>
+      <Reference name="OpenSim.Services.Interfaces"/>
+      <Reference name="Nini"/>
+      <Reference name="log4net"/>
+      <Reference name="XMLRPC"/>
+      <Reference name="Mono.Addins"/>
+
+      <Files>
+        <Match pattern="*.cs" recurse="true">
+          <Exclude name="obj" pattern="obj"/>
+        </Match>
+      </Files>
+    </Project>
 
     <!-- Tools -->
 
