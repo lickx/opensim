@@ -18,7 +18,7 @@ echo %GIT_BRANCH%@%GIT_REV% (%LAST_COMMIT_DATE%) > %VERSION_FILE%
 SET TARGET_ZIP=opensim-%GIT_BRANCH%-%LAST_COMMIT_DATE%_%GIT_REV%.zip
 echo %TARGET_ZIP%
 set excludes=-x "*Tests*" "bin/Gloebit.*" "bin/OpenSimMutelist.Modules.*" "bin/MoneyServer.*" "bin/OpenSim.Data.MySQL.MySQLMoneyDataWrapper.*" "bin/OpenSim.Modules.Currency.*" "bin/server_cert.p12" "bin/SineWaveCert.pfx"
-zip -r -o "%TARGET_ZIP%" bin CONTRIBUTORS.txt LICENSE.txt README.md ThirdPartyLicenses helper/index.html helper/robots.txt helper/search extra/OpenSimSearch %excludes%
+zip -r -o "%TARGET_ZIP%" bin CONTRIBUTORS.txt LICENSE.txt README.md ThirdPartyLicenses helper/index.html helper/robots.txt helper/search extra/search %excludes%
 
 if not exist bin\Gloebit.dll goto skipgloebit
 SET TARGET_ZIP=gloebit-%GIT_BRANCH%-%LAST_COMMIT_DATE%_%GIT_REV%.zip
