@@ -263,10 +263,9 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
         {
             //m_log.DebugFormat("[HGFRIENDS MODULE]: Entering StatusNotify for {0}", userID);
 
-            // First, let's divide the friends on a per-domain basis
             List<FriendInfo> locallst = new(friendList.Count);
+            List<UUID> hglst = new();
 
-            Dictionary<string, List<FriendInfo>> friendsPerDomain = new Dictionary<string, List<FriendInfo>>();
             foreach (FriendInfo friend in friendList)
             {
                 if (UUID.TryParse(friend.Friend, out UUID friendID))
@@ -284,12 +283,7 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
                         if (LocalStatusNotification(userID, friendID, online))
                             continue;
 
-                        if (!friendsPerDomain.TryGetValue(url, out List<FriendInfo> lst))
-                        {
-                            lst = new List<FriendInfo>();
-                            friendsPerDomain[url] = lst;
-                        }
-                        lst.Add(friend);
+                        hglst.Add(friendID);
                     }
                 }
             }
@@ -299,8 +293,8 @@ namespace OpenSim.Region.CoreModules.Avatar.Friends
             if (locallst.Count > 0)
                 base.StatusNotify(locallst, userID, online);
 
-            if(friendsPerDomain.Count > 0)
-                m_StatusNotifier.Notify(userID, friendsPerDomain, online);
+            if(hglst.Count > 0)
+                m_StatusNotifier.Notify(userID, hglst, online);
 
             //m_log.DebugFormat("[HGFRIENDS MODULE]: Exiting StatusNotify for {0}", userID);
         }
