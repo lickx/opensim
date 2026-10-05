@@ -3965,7 +3965,6 @@ namespace OpenSim.Region.Framework.Scenes
             //Check if the viewer is banned or in the viewer access list
             //We check if the substring is listed for higher flexebility
             bool ViewerDenied = true;
-            string cV = null;
 
             //Check if the specific viewer is listed in the allowed viewer list
             if (!String.IsNullOrWhiteSpace(m_AllowedViewers))

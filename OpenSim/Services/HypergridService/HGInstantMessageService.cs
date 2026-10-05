@@ -114,7 +114,7 @@ namespace OpenSim.Services.HypergridService
                 }
                 catch
                 {
-                    m_log.WarnFormat("[HG IM SERVICE]: Unable to load PresenceService");
+                    m_log.WarnFormat("[HG IM SERVICE]: Unable to load UserAgentService");
                 }
 
                 m_InGatekeeper = serverConfig.GetBoolean("InGatekeeper", false);
@@ -122,7 +122,7 @@ namespace OpenSim.Services.HypergridService
                 IConfig cnf = config.Configs["Messaging"];
                 if (cnf == null)
                 {
-                    m_log.Debug("[HG IM SERVICE]: Starting (without [MEssaging])");
+                    m_log.Debug("[HG IM SERVICE]: Starting (without [Messaging])");
                     return;
                 }
 
