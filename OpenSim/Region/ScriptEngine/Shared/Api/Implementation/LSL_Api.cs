@@ -118,7 +118,7 @@ namespace OpenSim.Region.ScriptEngine.Shared.Api
         protected bool m_AllowGodFunctions;
 
         protected double m_timer = Util.GetTimeStamp();
-        protected string m_SlurlPrefix = "http://slurl.com/secondlife";
+        protected string m_SlurlPrefix = "http://slurl.opensim.local";
 
         protected bool m_waitingForScriptAnswer = false;
         protected bool m_automaticLinkPermission = false;
