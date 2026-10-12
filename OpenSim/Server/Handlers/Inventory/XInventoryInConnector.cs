@@ -33,6 +33,7 @@ using System.Collections.Generic;
 using System.IO;
 using Nini.Config;
 using OpenSim.Framework;
+using OpenSim.Data;
 using OpenSim.Framework.ServiceAuth;
 using OpenSim.Server.Base;
 using OpenSim.Services.Interfaces;
@@ -76,7 +77,12 @@ namespace OpenSim.Server.Handlers.Inventory
 
             IServiceAuth auth = ServiceAuth.Create(config, m_ConfigName);
 
-            server.AddStreamHandler(new XInventoryConnectorPostHandler(m_InventoryService, auth));
+            // Only the public HG connector gets a travel/ownership gate.
+            HGInventoryTravelGate gate = null;
+            if (m_ConfigName.Equals("HGInventoryService", StringComparison.OrdinalIgnoreCase))
+                gate = new HGInventoryTravelGate(config);
+
+            server.AddStreamHandler(new XInventoryConnectorPostHandler(m_InventoryService, auth, gate));
         }
     }
 
@@ -84,12 +90,21 @@ namespace OpenSim.Server.Handlers.Inventory
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
+        private static readonly ILog m_audit =
+            LogManager.GetLogger("HGInventoryAudit");
+
         private IInventoryService m_InventoryService;
 
-        public XInventoryConnectorPostHandler(IInventoryService service, IServiceAuth auth) :
-                base("POST", "/xinventory", auth)
+        private readonly HGInventoryTravelGate m_TravelGate;
+
+        public XInventoryConnectorPostHandler(IInventoryService service, IServiceAuth auth)
+            : this(service, auth, null) { }
+
+        public XInventoryConnectorPostHandler(IInventoryService service, IServiceAuth auth,
+                HGInventoryTravelGate travelGate) : base("POST", "/xinventory", auth)
         {
             m_InventoryService = service;
+            m_TravelGate = travelGate;
         }
 
         protected override byte[] ProcessRequest(string path, Stream requestData,
@@ -111,6 +126,27 @@ namespace OpenSim.Server.Handlers.Inventory
                     return FailureResult();
 
                 string method = request["METHOD"].ToString();
+
+                m_audit.InfoFormat(
+                    "[XINVENTORY AUDIT]: method={0}, principal={1}, owner={2}, id={3}, folder={4}, parent={5}, bytes={6}",
+                    method,
+                    AuditField(request, "PRINCIPAL"),
+                    AuditField(request, "Owner"),
+                    AuditField(request, "ID"),
+                    AuditField(request, "Folder"),
+                    AuditField(request, "ParentID"),
+                    Encoding.UTF8.GetByteCount(body));
+
+                if (m_TravelGate != null)
+                {
+                    string decision;
+                    bool allowed = m_TravelGate.Check(method, request, out decision);
+                    m_audit.InfoFormat("[HG INVENTORY GATE]: method={0}, decision={1}, reason={2}",
+                        AuditField(request, "METHOD"), allowed ? "ALLOW" : "DENY", decision);
+                    if (!allowed)
+                        return FailureResult();
+                }
+
                 request.Remove("METHOD");
 
                 switch (method)
@@ -166,6 +202,19 @@ namespace OpenSim.Server.Handlers.Inventory
             }
 
             return FailureResult();
+        }
+
+        private static string AuditField(
+            Dictionary<string, object> request, string key)
+        {
+            if (!request.TryGetValue(key, out object value) || value == null)
+                return "-";
+
+            string text = value.ToString()
+                .Replace('\r', ' ')
+                .Replace('\n', ' ');
+
+            return text.Length > 128 ? text.Substring(0, 128) : text;
         }
 
         private byte[] FailureResult()
@@ -773,4 +822,268 @@ namespace OpenSim.Server.Handlers.Inventory
         }
 
     }
+    /// <summary>
+    /// Public HG containment, not authentication. Uses home-side travel records.
+    /// Raw private inventory is used only for read-only ownership/collision checks.
+    /// </summary>
+    public sealed class HGInventoryTravelGate
+    {
+        private readonly IHGTravelingData m_Travel;
+        private readonly IInventoryService m_LocalInventory;
+        private readonly HashSet<string> m_HomeURLs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public HGInventoryTravelGate(IConfigSource config)
+        {
+            IConfig db = config.Configs["DatabaseService"];
+            IConfig uas = config.Configs["UserAgentService"];
+            string provider = db == null ? "" : db.GetString("StorageProvider", "");
+            string connection = db == null ? "" : db.GetString("ConnectionString", "");
+            string realm = "hg_traveling_data";
+            if (uas != null)
+            {
+                provider = uas.GetString("StorageProvider", provider);
+                connection = uas.GetString("ConnectionString", connection);
+                realm = uas.GetString("Realm", realm);
+            }
+            m_Travel = ServerUtils.LoadPlugin<IHGTravelingData>(provider, new object[] { connection, realm });
+            if (m_Travel == null)
+                throw new Exception("HG inventory gate cannot load the travel database");
+
+            IConfig inv = config.Configs["InventoryService"];
+            if (inv == null)
+                throw new Exception("HG inventory gate requires [InventoryService]");
+            m_LocalInventory = ServerUtils.LoadPlugin<IInventoryService>(
+                inv.GetString("LocalServiceModule", ""), new object[] { config, "InventoryService" });
+            if (m_LocalInventory == null)
+                throw new Exception("HG inventory gate cannot load local inventory for ownership checks");
+
+            string home = Util.GetConfigVarFromSections<string>(config, "GatekeeperURI",
+                new string[] { "Startup", "Hypergrid", "UserAgentService" }, String.Empty);
+            if (String.IsNullOrWhiteSpace(home) && uas != null)
+                home = uas.GetString("ExternalName", "");
+            IConfig keeper = config.Configs["GatekeeperService"];
+            if (String.IsNullOrWhiteSpace(home) && keeper != null)
+                home = keeper.GetString("ExternalName", "");
+            AddHome(home);
+            IConfig constants = config.Configs["Const"];
+            if (constants != null)
+            {
+                string baseURL = constants.GetString("BaseURL", "");
+                Uri uri;
+                int port;
+                if (Uri.TryCreate(baseURL, UriKind.Absolute, out uri) &&
+                    Int32.TryParse(constants.GetString("PublicPort", "8002"), out port))
+                    AddHome(new UriBuilder(uri) { Port = port }.Uri.AbsoluteUri);
+            }
+            IConfig hg = config.Configs["Hypergrid"];
+            if (hg != null)
+                foreach (string alias in hg.GetString("GatekeeperURIAlias", "").Split(','))
+                    if (!String.IsNullOrWhiteSpace(alias))
+                        AddHome(alias.Contains("://") ? alias.Trim() : "http://" + alias.Trim());
+            IConfig publicInv = config.Configs["HGInventoryService"];
+            if (publicInv != null)
+                foreach (string alias in publicInv.GetString("InventoryGateHomeURIs", "").Split(','))
+                    if (!String.IsNullOrWhiteSpace(alias)) AddHome(alias.Trim());
+            if (m_HomeURLs.Count == 0)
+                throw new Exception("HG inventory gate requires a valid home GatekeeperURI");
+        }
+
+        private static string Normalize(string value)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(value, UriKind.Absolute, out uri) ||
+                (uri.Scheme != "http" && uri.Scheme != "https") || !String.IsNullOrEmpty(uri.UserInfo) ||
+                !String.IsNullOrEmpty(uri.Query) || !String.IsNullOrEmpty(uri.Fragment))
+                return null;
+            return uri.GetLeftPart(UriPartial.Authority).ToLowerInvariant() + uri.AbsolutePath.TrimEnd('/');
+        }
+
+        private void AddHome(string value)
+        {
+            string normalized = Normalize(value);
+            if (normalized != null) m_HomeURLs.Add(normalized);
+        }
+
+        private bool IsAbroad(UUID owner)
+        {
+            if (owner == UUID.Zero) return false;
+            HGTravelingData[] visits = m_Travel.GetSessions(owner);
+            if (visits == null) return false;
+            foreach (HGTravelingData visit in visits)
+            {
+                string destination;
+                if (visit.UserID != owner || visit.SessionID == UUID.Zero || visit.Data == null ||
+                    !visit.Data.TryGetValue("GridExternalName", out destination)) continue;
+                string normalized = Normalize(destination);
+                if (normalized != null && !m_HomeURLs.Contains(normalized)) return true;
+            }
+            return false;
+        }
+
+        private static UUID Required(Dictionary<string, object> request, string key)
+        {
+            object value;
+            UUID id;
+            if (!request.TryGetValue(key, out value) || value == null ||
+                !UUID.TryParse(value.ToString(), out id) || id == UUID.Zero)
+                throw new ArgumentException("missing-or-invalid-" + key);
+            return id;
+        }
+
+        private static List<UUID> IDs(Dictionary<string, object> request, string key)
+        {
+            object value;
+            if (!request.TryGetValue(key, out value) || value == null)
+                throw new ArgumentException("missing-" + key);
+            IEnumerable<string> values = value as List<string>;
+            if (values == null) values = value.ToString().Split(',');
+            List<UUID> ids = new List<UUID>();
+            foreach (string text in values)
+            {
+                UUID id;
+                if (!UUID.TryParse(text, out id) || id == UUID.Zero)
+                    throw new ArgumentException("invalid-" + key);
+                ids.Add(id);
+            }
+            if (ids.Count == 0) throw new ArgumentException("empty-" + key);
+            return ids;
+        }
+
+        private void Folder(UUID owner, UUID id)
+        {
+            InventoryFolderBase folder = m_LocalInventory.GetFolder(owner, id);
+            if (folder == null || folder.Owner != owner)
+                throw new ArgumentException("folder-owner-mismatch");
+        }
+
+        private InventoryItemBase Item(UUID owner, UUID id)
+        {
+            InventoryItemBase item = m_LocalInventory.GetItem(owner, id);
+            if (item == null || item.Owner != owner)
+                throw new ArgumentException("item-owner-mismatch");
+            Folder(owner, item.Folder);
+            return item;
+        }
+
+        public bool Check(string method, Dictionary<string, object> request, out string reason)
+        {
+            reason = "foreign-travel-record";
+            try
+            {
+                // Match the always-restricted suitcase policy, including its no-delete behavior.
+                if (method == "CREATEUSERINVENTORY" || method == "DELETEITEMS" ||
+                    method == "DELETEFOLDERS" || method == "PURGEFOLDER")
+                    throw new ArgumentException("operation-disabled-on-public-HG");
+
+                bool suppliedOwner = method == "ADDITEM" || method == "UPDATEITEM" ||
+                    method == "ADDFOLDER" || method == "UPDATEFOLDER";
+                UUID owner;
+                // Legacy single-item/folder reads may omit PRINCIPAL. Derive owner from stored data.
+                object claimedPrincipal;
+                UUID parsedPrincipal = UUID.Zero;
+                bool principalPresent = request.TryGetValue("PRINCIPAL", out claimedPrincipal);
+                if (principalPresent && (claimedPrincipal == null ||
+                    !UUID.TryParse(claimedPrincipal.ToString(), out parsedPrincipal)))
+                    throw new ArgumentException("invalid-PRINCIPAL");
+                if ((method == "GETITEM" || method == "GETFOLDER") && parsedPrincipal == UUID.Zero)
+                {
+                    UUID id = Required(request, "ID");
+                    if (method == "GETITEM")
+                    {
+                        InventoryItemBase item = m_LocalInventory.GetItem(UUID.Zero, id);
+                        if (item == null) throw new ArgumentException("item-not-found");
+                        owner = item.Owner;
+                    }
+                    else
+                    {
+                        InventoryFolderBase folder = m_LocalInventory.GetFolder(UUID.Zero, id);
+                        if (folder == null) throw new ArgumentException("folder-not-found");
+                        owner = folder.Owner;
+                    }
+                }
+                else owner = Required(request, suppliedOwner ? "Owner" : "PRINCIPAL");
+                if (!IsAbroad(owner)) throw new ArgumentException("no-foreign-travel-record");
+
+                switch (method)
+                {
+                    case "GETINVENTORYSKELETON": case "GETROOTFOLDER": case "GETFOLDERFORTYPE":
+                    case "GETACTIVEGESTURES": case "GETASSETPERMISSIONS": break;
+                    case "GETITEM": Item(owner, Required(request, "ID")); break;
+                    case "GETFOLDER": Folder(owner, Required(request, "ID")); break;
+                    case "GETFOLDERCONTENT": case "GETFOLDERITEMS":
+                        Folder(owner, Required(request, "FOLDER")); break;
+                    case "GETMULTIPLEITEMS":
+                        foreach (UUID id in IDs(request, "ITEMS")) Item(owner, id);
+                        break;
+                    case "GETMULTIPLEFOLDERSCONTENT":
+                        List<UUID> folders = IDs(request, "FOLDERS");
+                        if (Int32.Parse(request["COUNT"].ToString()) != folders.Count)
+                            throw new ArgumentException("folder-count-mismatch");
+                        foreach (UUID id in folders) Folder(owner, id);
+                        break;
+                    case "ADDITEM":
+                        Folder(owner, Required(request, "Folder"));
+                        if (m_LocalInventory.GetItem(UUID.Zero, Required(request, "ID")) != null)
+                            throw new ArgumentException("additem-existing-UUID");
+                        break;
+                    case "UPDATEITEM":
+                        InventoryItemBase original = Item(owner, Required(request, "ID"));
+                        if (original.Folder != Required(request, "Folder"))
+                            throw new ArgumentException("updateitem-folder-change");
+                        break;
+                    case "ADDFOLDER":
+                        Folder(owner, Required(request, "ParentID"));
+                        if (m_LocalInventory.GetFolder(UUID.Zero, Required(request, "ID")) != null)
+                            throw new ArgumentException("addfolder-existing-UUID");
+                        break;
+                    case "UPDATEFOLDER": case "MOVEFOLDER":
+                        UUID folderID = Required(request, "ID");
+                        Folder(owner, folderID);
+                        UUID parentID = Required(request, "ParentID");
+                        Folder(owner, parentID);
+                        // Reject cycles; also blocks moving an ancestor below itself.
+                        HashSet<UUID> seen = new HashSet<UUID>();
+                        UUID ancestor = parentID;
+                        while (ancestor != UUID.Zero)
+                        {
+                            if (ancestor == folderID || !seen.Add(ancestor))
+                                throw new ArgumentException("folder-cycle");
+                            InventoryFolderBase f = m_LocalInventory.GetFolder(owner, ancestor);
+                            if (f == null || f.Owner != owner)
+                                throw new ArgumentException("invalid-parent-chain");
+                            ancestor = f.ParentID;
+                        }
+                        // UPDATEFOLDER must not bypass the suitcase MoveFolder scope checks.
+                        if (method == "UPDATEFOLDER")
+                        {
+                            InventoryFolderBase old = m_LocalInventory.GetFolder(owner, folderID);
+                            if (old.ParentID != parentID)
+                                throw new ArgumentException("updatefolder-parent-change-use-movefolder");
+                        }
+                        break;
+                    case "MOVEITEMS":
+                        List<UUID> items = IDs(request, "IDLIST");
+                        List<UUID> destinations = IDs(request, "DESTLIST");
+                        if (items.Count != destinations.Count)
+                            throw new ArgumentException("move-count-mismatch");
+                        for (int i = 0; i < items.Count; ++i)
+                        { Item(owner, items[i]); Folder(owner, destinations[i]); }
+                        break;
+                    default: throw new ArgumentException("unknown-method");
+                }
+                return true;
+            }
+            catch (ArgumentException e)
+            {
+                reason = e.Message;
+                return false;
+            }
+            catch (Exception)
+            {
+                reason = "validation-error"; // Fail closed; no credentials/connection strings in audit.
+                return false;
+            }
+        }
+    }
+
 }
