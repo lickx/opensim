@@ -1218,7 +1218,11 @@ namespace OpenSim.Framework.Servers.HttpServer
             {
                 xmlRprcRequest.Params.Add(request.RemoteIPEndPoint); // Param[1]
                 xmlRprcRequest.Params.Add(request.Url); // Param[2]
-                xmlRprcRequest.Params.Add(request.Headers["x-forwarded-for"]); // Param[3]
+                string xff = request.Headers["X-Forwarded-For"] 
+                             ?? request.Headers["x-forwarded-for"] 
+                             ?? request.Headers["X-Real-IP"] 
+                             ?? request.Headers["x-real-ip"];
+                xmlRprcRequest.Params.Add(string.IsNullOrEmpty(xff) ? string.Empty : xff); // Param[3]
 
                 // reserve this for
                 // ... by Fumi.Iseki for DTLNSLMoneyServer
