@@ -10,6 +10,7 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using OpenMetaverse;
 using System.Threading.Tasks;
+using OpenSim.Framework;
 
 namespace OSHttpServer
 {
@@ -191,8 +192,6 @@ namespace OSHttpServer
             m_currentRequest.Method = e.HttpMethod.ToString();
             m_currentRequest.HttpVersion = e.HttpVersion.ToString();
             m_currentRequest.UriPath = e.UriPath.ToString();
-            m_currentRequest.AddHeader("remote_addr", LocalIPEndPoint.Address.ToString());
-            m_currentRequest.AddHeader("remote_port", LocalIPEndPoint.Port.ToString());
             m_currentRequest.ArrivalTS = ContextTimeoutManager.GetTimeStamp();
 
             FirstRequestLineReceived = true;
@@ -480,6 +479,20 @@ namespace OSHttpServer
             // load cookies if they exist
             if(m_currentRequest.Headers["cookie"] is not null)
                 m_currentRequest.SetCookies(new RequestCookies(m_currentRequest.Headers["cookie"]));
+            string xff = m_currentRequest.Headers["x-forwarded-for"];
+            if(!string.IsNullOrEmpty(xff))
+            {
+                if(NetworkXffUtil.CheckXFF(m_currentRequest.LocalIPEndPoint, xff, out IPEndPoint xffremote, out string header))
+                {
+                    m_currentRequest.Headers["x-forwarded-for"] = header;
+                    m_currentRequest.RemoteIPEndPoint = xffremote;
+                }
+                else
+                    m_currentRequest.Headers.Remove("x-forwarded-for");
+            }
+
+            m_currentRequest.AddHeader("remote_addr", m_currentRequest.RemoteIPEndPoint.Address.ToString());
+            m_currentRequest.AddHeader("remote_port", LocalIPEndPoint.Port.ToString());
 
             m_currentRequest.Body.Seek(0, SeekOrigin.Begin);
 

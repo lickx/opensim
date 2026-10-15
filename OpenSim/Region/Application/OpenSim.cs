@@ -108,7 +108,10 @@ namespace OpenSim
                     m_consoleType= startupConfig.GetString("console", String.Empty);
 
                 if (networkConfig != null)
+                {
                     m_consolePort = (uint)networkConfig.GetInt("console_port", 0);
+                    NetworkXffUtil.Initialize(networkConfig);
+                }
 
                 m_timedScript = startupConfig.GetString("timer_Script", "disabled");
                 if (m_timedScript != "disabled")
