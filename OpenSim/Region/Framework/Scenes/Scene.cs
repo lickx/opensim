@@ -3986,7 +3986,7 @@ namespace OpenSim.Region.Framework.Scenes
                 m_log.DebugFormat(
                     "[SCENE]: Access denied for {0} {1} using {2}",
                     acd.firstname, acd.lastname, curViewer);
-                reason = "Access denied, your viewer is banned";
+                reason = "Your viewer does not meet our technical or ethical standards";
                 return false;
             }
 
