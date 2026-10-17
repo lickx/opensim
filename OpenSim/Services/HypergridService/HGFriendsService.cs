@@ -104,6 +104,11 @@ namespace OpenSim.Services.HypergridService
                     throw new Exception("No PresenceService in " + m_ConfigName);
                 m_PresenceService = ServerUtils.LoadPlugin<IPresenceService>(theService, args);
 
+                theService = serverConfig.GetString("GridUserService", string.Empty);
+                if (theService.Length == 0)
+                    throw new Exception("No GridUserService in " + m_ConfigName);
+                m_GridUserService = ServerUtils.LoadPlugin<IGridUserService>(theService, args);
+
                 m_FriendsSimConnector = new FriendsSimConnector();
 
                 m_log.DebugFormat("[HGFRIENDS SERVICE]: Starting...");
@@ -132,6 +137,9 @@ namespace OpenSim.Services.HypergridService
                 return false;
 
             m_log.DebugFormat("[HGFRIENDS SERVICE]: New friendship {0} {1} ({2})", friend.PrincipalID, friend.Friend, verified);
+
+            // Mantis 9199: Make sure the new HG friend is in the GridUser table
+            m_GridUserService?.LoggedIn(friendID.ToString()+";"+url+";"+first+" "+last);
 
             // Does the friendship already exist?
             FriendInfo[] finfos = m_FriendsService.GetFriends(friend.PrincipalID);

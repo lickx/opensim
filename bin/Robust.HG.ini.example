@@ -860,6 +860,7 @@
     UserAccountService = "OpenSim.Services.UserAccountService.dll:UserAccountService"
     GridService = "OpenSim.Services.GridService.dll:GridService"
     PresenceService = "OpenSim.Services.PresenceService.dll:PresenceService"
+    GridUserService = "OpenSim.Services.UserAccountService.dll:GridUserService"
 
 
 [HGInstantMessageService]
