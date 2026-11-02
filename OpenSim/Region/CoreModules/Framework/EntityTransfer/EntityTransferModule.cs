@@ -813,6 +813,12 @@ namespace OpenSim.Region.CoreModules.Framework.EntityTransfer
 
             if (currentAgentCircuit is not null)
             {
+
+                if (currentAgentCircuit.AgentID == agentCircuit.AgentID &&
+                    currentAgentCircuit.SessionID == agentCircuit.SessionID)
+                {
+                    agentCircuit.ServiceSessionID = currentAgentCircuit.ServiceSessionID;
+                }
                 agentCircuit.ServiceURLs = currentAgentCircuit.ServiceURLs;
                 agentCircuit.IPAddress = currentAgentCircuit.IPAddress;
                 agentCircuit.Viewer = currentAgentCircuit.Viewer;

@@ -232,6 +232,32 @@ namespace OpenSim.Services.HypergridService
 
         public bool LoginAgentToGrid(GridRegion source, AgentCircuitData agentCircuit, GridRegion gatekeeper, GridRegion finalDestination, bool fromLogin, out string reason)
         {
+
+
+m_log.InfoFormat(
+    "[HOMEAGENT DEBUG]: source={0}; agentCircuit={1}; gatekeeper={2}; finalDestination={3}; fromLogin={4}",
+    source == null
+        ? "null"
+        : $"name={source.RegionName}, id={source.RegionID}, uri={source.ServerURI}",
+    agentCircuit == null
+        ? "null"
+        : $"agent={agentCircuit.AgentID}, name={agentCircuit.firstname} {agentCircuit.lastname}, " +
+          $"ip={agentCircuit.IPAddress ?? "null"}, circuit={agentCircuit.circuitcode}, " +
+          $"child={agentCircuit.child}, teleportFlags={agentCircuit.teleportFlags}, " +
+          $"sessionPresent={agentCircuit.SessionID != UUID.Zero}, " +
+          $"secureSessionPresent={agentCircuit.SecureSessionID != UUID.Zero}, " +
+          $"serviceTokenPresent={!string.IsNullOrEmpty(agentCircuit.ServiceSessionID)}, " +
+          $"viewer={agentCircuit.Viewer ?? "null"}, channel={agentCircuit.Channel ?? "null"}, " +
+          $"startpos={agentCircuit.startpos}",
+    gatekeeper == null
+        ? "null"
+        : $"name={gatekeeper.RegionName}, id={gatekeeper.RegionID}, uri={gatekeeper.ServerURI}",
+    finalDestination == null
+        ? "null"
+        : $"name={finalDestination.RegionName}, id={finalDestination.RegionID}, uri={finalDestination.ServerURI}",
+    fromLogin);
+
+
             m_log.DebugFormat("[USER AGENT SERVICE]: Request to login user {0} {1} (@{2}) to grid {3}",
                 agentCircuit.firstname, agentCircuit.lastname, (fromLogin ? agentCircuit.IPAddress : "stored IP"), gatekeeper.ServerURI);
 
@@ -757,3 +783,4 @@ namespace OpenSim.Services.HypergridService
     }
 
 }
+
