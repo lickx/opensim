@@ -1590,12 +1590,9 @@ namespace OpenSim.Region.Framework.Scenes
             // Resume scripts
             foreach (SceneObjectGroup sog in attachments)
             {
-                if (sog.ContainsScripts())
-                {
-                    sog.RootPart.ParentGroup.CreateScriptInstances(0, false, m_scene.DefaultScriptEngine, GetStateSource());
-                    sog.ResumeScripts();
-                    sog.ScheduleGroupForFullUpdate();
-                }
+                sog.RootPart.ParentGroup.CreateScriptInstances(0, false, m_scene.DefaultScriptEngine, GetStateSource());
+                sog.ResumeScripts();
+                sog.ScheduleGroupForFullUpdate();
             }
         }
 
@@ -2358,7 +2355,6 @@ namespace OpenSim.Region.Framework.Scenes
                 // attachments
                 if (IsNPC || IsRealLogin(m_teleportFlags))
                 {
-                    GotAttachmentsData = true;
                     if (Scene.AttachmentsModule != null)
                      {
                         if(IsNPC)
