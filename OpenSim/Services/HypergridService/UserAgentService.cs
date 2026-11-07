@@ -25,17 +25,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
-/*
-
-update to hold travel id
-
-ALTER TABLE hg_traveling_data
-    ADD COLUMN SecureSessionHash VARCHAR(44) NOT NULL DEFAULT '',
-    ADD COLUMN TravelExpiresUtcTicks BIGINT NOT NULL DEFAULT 0;
-
-*/
-
 using System;
 using System.Collections.Generic;
 using System.Net;
