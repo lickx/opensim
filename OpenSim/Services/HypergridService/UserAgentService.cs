@@ -29,6 +29,9 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Reflection;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 using OpenSim.Data;
 using OpenSim.Framework;
@@ -59,6 +62,42 @@ namespace OpenSim.Services.HypergridService
         //static Dictionary<UUID, TravelingAgentInfo> m_Database = new Dictionary<UUID, TravelingAgentInfo>();
 
         static bool m_Initialized = false;
+
+        // Bound, persistent authorization; separate from AuthenticationService token expiry.
+        private static readonly TimeSpan TravelLifetime = TimeSpan.FromHours(8);
+        private static readonly object[] TravelLocks = CreateTravelLocks();
+
+        private static object[] CreateTravelLocks()
+        {
+            object[] locks = new object[256];
+            for (int i = 0; i < locks.Length; ++i) locks[i] = new object();
+            return locks;
+        }
+
+        private static object TravelLock(UUID userID)
+        {
+            return TravelLocks[(int)((uint)userID.GetHashCode() % (uint)TravelLocks.Length)];
+        }
+
+        private static string SecureSessionHash(UUID secureSession)
+        {
+            using (SHA256 sha = SHA256.Create())
+                return Convert.ToBase64String(sha.ComputeHash(
+                    Encoding.UTF8.GetBytes(secureSession.ToString())));
+        }
+
+        private static bool MatchesSecureSession(string storedHash, UUID secureSession)
+        {
+            if (string.IsNullOrEmpty(storedHash) || secureSession.IsZero()) return false;
+            try
+            {
+                byte[] stored = Convert.FromBase64String(storedHash);
+                byte[] supplied = Convert.FromBase64String(SecureSessionHash(secureSession));
+                return CryptographicOperations.FixedTimeEquals(stored, supplied);
+            }
+            catch (FormatException) { return false; }
+        }
+
 
         protected static IGridUserService m_GridUserService;
         protected static IGridService m_GridService;
@@ -232,6 +271,45 @@ namespace OpenSim.Services.HypergridService
 
         public bool LoginAgentToGrid(GridRegion source, AgentCircuitData agentCircuit, GridRegion gatekeeper, GridRegion finalDestination, bool fromLogin, out string reason)
         {
+            if (agentCircuit == null || agentCircuit.AgentID.IsZero() ||
+                agentCircuit.SessionID.IsZero() || agentCircuit.SecureSessionID.IsZero() ||
+                gatekeeper == null || string.IsNullOrEmpty(gatekeeper.ServerURI) ||
+                finalDestination == null)
+            {
+                reason = "Invalid travel request";
+                return false;
+            }
+
+            // Serialize travel, replacement login and UAS logout for this avatar.
+            // Verification callbacks do not take this lock.
+            lock (TravelLock(agentCircuit.AgentID))
+            {
+                if (!fromLogin)
+                {
+                    HGTravelingData record = m_Database.Get(agentCircuit.SessionID);
+                    TravelingAgentInfo existing = record == null || record.Data == null
+                        ? null : new TravelingAgentInfo(record);
+                    if (existing == null || existing.UserID != agentCircuit.AgentID ||
+                        existing.SessionID != agentCircuit.SessionID ||
+                        existing.TravelExpiresUtcTicks <= DateTime.UtcNow.Ticks ||
+                        !MatchesSecureSession(existing.SecureSessionHash, agentCircuit.SecureSessionID))
+                    {
+                        m_log.WarnFormat("[HOMEAGENT AUTH]: Rejected travel for user {0}; missing, expired or mismatched authorization",
+                            agentCircuit.AgentID);
+                        reason = "Travel authorization expired or invalid. Please log in again.";
+                        return false;
+                    }
+                }
+
+                return LoginAgentToGridAuthorized(source, agentCircuit, gatekeeper,
+                    finalDestination, fromLogin, out reason);
+            }
+        }
+
+        private bool LoginAgentToGridAuthorized(GridRegion source, AgentCircuitData agentCircuit, GridRegion gatekeeper, GridRegion finalDestination, bool fromLogin, out string reason)
+        {
+
+
             m_log.DebugFormat("[USER AGENT SERVICE]: Request to login user {0} {1} (@{2}) to grid {3}",
                 agentCircuit.firstname, agentCircuit.lastname, (fromLogin ? agentCircuit.IPAddress : "stored IP"), gatekeeper.ServerURI);
 
@@ -293,15 +371,25 @@ namespace OpenSim.Services.HypergridService
 
             m_log.DebugFormat("[USER AGENT SERVICE]: this grid: {0}, desired grid: {1}, desired region: {2}", m_GridName, gridName, region.RegionID);
 
-            if (m_GridName.Equals(gridName, StringComparison.InvariantCultureIgnoreCase))
+            try
             {
-                success = m_GatekeeperService.LoginAgent(source, agentCircuit, finalDestination, out reason);
+                if (m_GridName.Equals(gridName, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    success = m_GatekeeperService.LoginAgent(source, agentCircuit, finalDestination, out reason);
+                }
+                else
+                {
+                    //TODO: Should there not be a call to QueryAccess here?
+                    EntityTransferContext ctx = new();
+                    success = m_GatekeeperConnector.CreateAgent(source, region, agentCircuit, (uint)Constants.TeleportFlags.ViaLogin, ctx, out reason);
+                }
             }
-            else
+            catch
             {
-                //TODO: Should there not be a call to QueryAccess here?
-                EntityTransferContext ctx = new();
-                success = m_GatekeeperConnector.CreateAgent(source, region, agentCircuit, (uint)Constants.TeleportFlags.ViaLogin, ctx, out reason);
+                // Undo provisional travel state on connector exceptions as well as rejection.
+                if (old is not null) StoreTravelInfo(old);
+                else m_Database.Delete(agentCircuit.SessionID);
+                throw;
             }
 
             if (!success)
@@ -317,9 +405,20 @@ namespace OpenSim.Services.HypergridService
                 return false;
             }
 
-            // Everything is ok
-
+            // Renew only after the destination accepts travel.
+            travel.TravelExpiresUtcTicks = DateTime.UtcNow.Add(TravelLifetime).Ticks;
             StoreTravelInfo(travel);
+
+            if (fromLogin)
+            {
+                // A successful replacement login revokes older travel sessions for this user.
+                HGTravelingData[] sessions = m_Database.GetSessions(agentCircuit.AgentID);
+                if (sessions != null)
+                    foreach (HGTravelingData previous in sessions)
+                        if (previous.UserID == agentCircuit.AgentID &&
+                            previous.SessionID != agentCircuit.SessionID)
+                            m_Database.Delete(previous.SessionID);
+            }
 
             return true;
         }
@@ -352,7 +451,12 @@ namespace OpenSim.Services.HypergridService
             };
 
             if (fromLogin)
+            {
+                // Only trusted in-process authenticated login may initialize this binding.
                 travel.ClientIPAddress = agentCircuit.IPAddress;
+                travel.SecureSessionHash = SecureSessionHash(agentCircuit.SecureSessionID);
+                travel.TravelExpiresUtcTicks = DateTime.UtcNow.Add(TravelLifetime).Ticks;
+            }
 
             StoreTravelInfo(travel);
 
@@ -361,13 +465,18 @@ namespace OpenSim.Services.HypergridService
 
         public void LogoutAgent(UUID userID, UUID sessionID)
         {
-            m_log.DebugFormat("[USER AGENT SERVICE]: User {0} logged out", userID);
+            lock (TravelLock(userID))
+            {
+                HGTravelingData record = m_Database.Get(sessionID);
+                if (record == null || record.UserID != userID) return;
+                m_log.DebugFormat("[USER AGENT SERVICE]: User {0} logged out", userID);
+                m_Database.Delete(sessionID);
 
-            m_Database.Delete(sessionID);
-
-            GridUserInfo guinfo = m_GridUserService.GetGridUserInfo(userID.ToString());
-            if (guinfo is not null)
-                m_GridUserService.LoggedOut(userID.ToString(), sessionID, guinfo.LastRegionID, guinfo.LastPosition, guinfo.LastLookAt);
+                GridUserInfo guinfo = m_GridUserService.GetGridUserInfo(userID.ToString());
+                if (guinfo is not null)
+                    m_GridUserService.LoggedOut(userID.ToString(), sessionID,
+                        guinfo.LastRegionID, guinfo.LastPosition, guinfo.LastLookAt);
+            }
         }
 
         // We need to prevent foreign users with the same UUID as a local user
@@ -713,7 +822,9 @@ namespace OpenSim.Services.HypergridService
                 {
                     ["GridExternalName"] = travel.GridExternalName,
                     ["ServiceToken"] = travel.ServiceToken,
-                    ["ClientIPAddress"] = travel.ClientIPAddress
+                    ["ClientIPAddress"] = travel.ClientIPAddress,
+                    ["SecureSessionHash"] = travel.SecureSessionHash,
+                    ["TravelExpiresUtcTicks"] = travel.TravelExpiresUtcTicks.ToString(CultureInfo.InvariantCulture)
                 }
             };
 
@@ -730,6 +841,8 @@ namespace OpenSim.Services.HypergridService
         public string GridExternalName = string.Empty;
         public string ServiceToken = string.Empty;
         public string ClientIPAddress = string.Empty; // as seen from this user agent service
+        public string SecureSessionHash = string.Empty;
+        public long TravelExpiresUtcTicks;
 
         public TravelingAgentInfo(HGTravelingData t)
         {
@@ -740,6 +853,11 @@ namespace OpenSim.Services.HypergridService
                 GridExternalName = t.Data["GridExternalName"];
                 ServiceToken = t.Data["ServiceToken"];
                 ClientIPAddress = t.Data["ClientIPAddress"];
+                if (t.Data.TryGetValue("SecureSessionHash", out string hash))
+                    SecureSessionHash = hash;
+                if (t.Data.TryGetValue("TravelExpiresUtcTicks", out string expiry))
+                    long.TryParse(expiry, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out TravelExpiresUtcTicks);
             }
         }
 
@@ -752,8 +870,11 @@ namespace OpenSim.Services.HypergridService
                 GridExternalName = old.GridExternalName;
                 ServiceToken = old.ServiceToken;
                 ClientIPAddress = old.ClientIPAddress;
+                SecureSessionHash = old.SecureSessionHash;
+                TravelExpiresUtcTicks = old.TravelExpiresUtcTicks;
             }
         }
     }
 
 }
+

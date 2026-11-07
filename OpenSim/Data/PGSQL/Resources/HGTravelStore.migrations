@@ -12,6 +12,14 @@ CREATE TABLE hg_traveling_data (
     "TMStamp" timestamp NOT NULL default now()
 );
 
-
 COMMIT;
 
+:VERSION 2         # -------------------------- 
+
+BEGIN;
+
+ALTER TABLE hg_traveling_data
+    ADD COLUMN SecureSessionHash VARCHAR(44) NOT NULL DEFAULT '',
+    ADD COLUMN TravelExpiresUtcTicks BIGINT NOT NULL DEFAULT 0;
+
+COMMIT;
