@@ -92,13 +92,7 @@ namespace OpenSim.Region.CoreModules.Framework.InventoryAccess
                     IConfig thisModuleConfig = source.Configs["HGInventoryAccessModule"];
                     if (thisModuleConfig != null)
                     {
-                        // SECURITY FIX (Laxton Consulting / IMA, @llaxton, 2026-07-26): default changed from
-                        // true to false. Prior default silently allowed Hypergrid asset export from
-                        // every grid unless an administrator explicitly opted out - a default-allow
-                        // posture for content leaving the grid. This is now default-deny; grid
-                        // owners who want the prior behavior must explicitly set
-                        // OutboundPermission = true in their HGInventoryAccessModule config section.
-                        m_OutboundPermission = thisModuleConfig.GetBoolean("OutboundPermission", false);
+                        m_OutboundPermission = thisModuleConfig.GetBoolean("OutboundPermission", true);
                         m_RestrictInventoryAccessAbroad = thisModuleConfig.GetBoolean("RestrictInventoryAccessAbroad", true);
                         m_CheckSeparateAssets = thisModuleConfig.GetBoolean("CheckSeparateAssets", false);
                         m_LocalAssetsURL = thisModuleConfig.GetString("RegionHGAssetServerURI", string.Empty);
