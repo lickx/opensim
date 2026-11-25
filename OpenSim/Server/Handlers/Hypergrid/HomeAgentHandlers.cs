@@ -89,10 +89,9 @@ namespace OpenSim.Server.Handlers.Hypergrid
                 m_log.ErrorFormat("[HOME AGENT HANDLER]: Problem in UnpackData");
             }
 
-
-            // Public HTTP requests cannot bootstrap a login session.
-            // Initial login must call the local UserAgentService directly.
-            data.fromLogin = false;
+            // Verify if this call came from the login server
+            if (remoteAddress == m_LoginServerIP)
+                data.fromLogin = true;
 
         }
 
@@ -134,4 +133,3 @@ namespace OpenSim.Server.Handlers.Hypergrid
     }
 
 }
-
