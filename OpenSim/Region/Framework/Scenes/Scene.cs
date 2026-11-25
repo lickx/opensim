@@ -4623,29 +4623,19 @@ Label_GroupsDone:
         /// <returns>true if we handled it.</returns>
         public virtual bool IncomingUpdateChildAgent(AgentPosition cAgentData)
         {
-//            m_log.DebugFormat(
-//                "[SCENE PRESENCE]: IncomingChildAgentDataUpdate POSITION for {0} in {1}, position {2}",
-//                cAgentData.AgentID, Name, cAgentData.Position);
+            //m_log.DebugFormat(
+            //    "[SCENE PRESENCE]: IncomingChildAgentDataUpdate POSITION for {0} in {1}, position {2}",
+            //    cAgentData.AgentID, Name, cAgentData.Position);
 
-            ScenePresence childAgentUpdate = GetScenePresence(cAgentData.AgentID);
-            if (childAgentUpdate is not null)
+            if (TryGetSceneChildPresence(cAgentData.AgentID, out ScenePresence targetChild))
             {
-//                if (childAgentUpdate.ControllingClient.SessionId != cAgentData.SessionID)
-//                    // Only warn for now
-//                    m_log.WarnFormat("[SCENE]: Attempt at updating position of agent {0} with invalid session id {1}. Neighbor running older version?",
-//                        childAgentUpdate.UUID, cAgentData.SessionID);
-
-                // I can't imagine *yet* why we would get an update if the agent is a root agent..
-                // however to avoid a race condition crossing borders..
-                if (childAgentUpdate.IsChildAgent)
+                if (targetChild.ControllingClient.SessionId.Equals(cAgentData.SessionID))
                 {
-                    //Send Data to ScenePresence
-                    childAgentUpdate.UpdateChildAgent(cAgentData);
-                    // Not Implemented:
-                    //TODO: Do we need to pass the message on to one of our neighbors?
+                    targetChild.UpdateChildAgent(cAgentData);
+                    return true;
                 }
-
-                return true;
+                else
+                    m_log.Warn($"[SCENE]: Ignoring a child position update for agent {targetChild.UUID} in {Name} due to SessionID mismatch");
             }
 
             return false;
@@ -5193,6 +5183,13 @@ Label_GroupsDone:
         {
             return m_sceneGraph.TryGetSceneRootPresence(agentID, out presence);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryGetSceneChildPresence(UUID agentID, out ScenePresence presence)
+        {
+            return m_sceneGraph.TryGetSceneChildPresence(agentID, out presence);
+        }
+
         /// <summary>
         /// Request the scene presence by name.
         /// </summary>
