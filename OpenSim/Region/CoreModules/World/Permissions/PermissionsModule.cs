@@ -2041,6 +2041,9 @@ namespace OpenSim.Region.CoreModules.World.Permissions
             if (GenericEstatePermission(userID))
                 return true;
 
+            if (m_scene.RegionInfo.RegionSettings.BlockTerraform)
+                return false;
+
             float X = position.X;
             float Y = position.Y;
             int id = (int)position.Z;
