@@ -277,9 +277,9 @@ namespace OpenSim.Services.HypergridService
                     online
                 );
 
-                //usersToBeNotified.Remove(friendSession.UserID.ToString());
+                usersToBeNotified.Remove(friendSession.UserID.ToString());
 
-                if (online && UUID.TryParse(friendSession.UserID, out UUID id) && !localFriendsOnline.Contains(id))
+                if (UUID.TryParse(friendSession.UserID, out UUID id) && !localFriendsOnline.Contains(id))
                 {
                     localFriendsOnline.Add(id);
                 }
